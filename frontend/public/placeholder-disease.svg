@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect fill="#f3f4f6" width="320" height="200"/>
+  <ellipse cx="160" cy="100" rx="80" ry="60" fill="#e5e7eb" stroke="#d1d5db" stroke-width="2"/>
+  <ellipse cx="140" cy="85" rx="22" ry="16" fill="#fca5a5" opacity="0.8"/>
+  <ellipse cx="175" cy="95" rx="28" ry="20" fill="#f87171" opacity="0.7"/>
+  <ellipse cx="150" cy="115" rx="18" ry="14" fill="#ef4444" opacity="0.6"/>
+  <text x="160" y="180" text-anchor="middle" fill="#6b7280" font-family="system-ui" font-size="12">Disease Anatomy Map</text>
+</svg>

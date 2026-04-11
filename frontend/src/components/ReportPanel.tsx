@@ -108,23 +108,23 @@ export function ReportPanel({ sections }: ReportPanelProps) {
       <Card className="overflow-hidden h-full animate-fade-in">
         <CardHeader className="py-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <FileText className="w-3.5 h-3.5 text-white" />
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-confidence-high to-emerald-400 flex items-center justify-center">
+              <FileText className="w-3.5 h-3.5 text-bg-base" />
             </div>
-            <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+            <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
               Validation Report
             </h2>
           </div>
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col items-center justify-center text-center min-h-[300px]">
-          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-            <FileText className="w-8 h-8 text-slate-300" />
+          <div className="w-16 h-16 rounded-full bg-bg-surface flex items-center justify-center mb-4">
+            <FileText className="w-8 h-8 text-text-muted" />
           </div>
-          <p className="text-sm text-slate-500 mb-2">
+          <p className="text-sm text-text-muted mb-2">
             Report will appear when validation completes
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-text-muted">
             The AI agent is analyzing your drug target
           </p>
         </CardContent>
@@ -141,10 +141,10 @@ export function ReportPanel({ sections }: ReportPanelProps) {
     <Card className="overflow-hidden h-full flex flex-col animate-fade-in-scale">
       <CardHeader className="py-3 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-            <FileText className="w-3.5 h-3.5 text-white" />
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-confidence-high to-emerald-400 flex items-center justify-center">
+            <FileText className="w-3.5 h-3.5 text-bg-base" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
             Validation Report
           </h2>
         </div>
@@ -157,15 +157,15 @@ export function ReportPanel({ sections }: ReportPanelProps) {
               <AccordionItem key={section.value} value={section.value}>
                 <AccordionTrigger>
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br from-slate-400 to-slate-500">
-                      <span className="text-white">{section.icon}</span>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-surface border border-white/[0.08]">
+                      <span className="text-primary">{section.icon}</span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-800">{section.label}</span>
+                    <span className="text-sm font-semibold text-text-primary">{section.label}</span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="pl-10 pr-2">
-                    <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                    <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
                       {section.content}
                     </div>
                   </div>

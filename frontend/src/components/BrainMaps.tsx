@@ -32,29 +32,29 @@ function BrainMapPanel({ title, mapData, icon, gradientFrom, gradientTo }: Brain
           )}>
             {icon}
           </div>
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
         </div>
       </CardHeader>
 
       {/* Map Container */}
-      <div className="relative w-full h-[180px] bg-slate-50 overflow-hidden">
+      <div className="relative w-full h-[180px] bg-bg-surface overflow-hidden">
         {!mapData ? (
           // Placeholder with skeleton
           <div className="absolute inset-0 brain-placeholder flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 rounded-full bg-white/50 flex items-center justify-center">
-                <Brain className="w-8 h-8 text-slate-300 animate-pulse" />
+              <div className="w-16 h-16 rounded-full bg-bg-elevated flex items-center justify-center">
+                <Brain className="w-8 h-8 text-text-muted animate-pulse" />
               </div>
-              <span className="text-xs text-slate-400 font-medium">Awaiting data...</span>
+              <span className="text-xs text-text-muted font-medium">Awaiting data...</span>
             </div>
           </div>
         ) : imageError ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-50">
+          <div className="absolute inset-0 flex items-center justify-center bg-confidence-low/5">
             <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <Brain className="w-6 h-6 text-red-300" />
+              <div className="w-12 h-12 rounded-full bg-confidence-low/10 flex items-center justify-center">
+                <Brain className="w-6 h-6 text-confidence-low" />
               </div>
-              <span className="text-xs text-red-400 font-medium">Failed to load image</span>
+              <span className="text-xs text-confidence-low font-medium">Failed to load image</span>
             </div>
           </div>
         ) : (
@@ -81,12 +81,12 @@ function BrainMapPanel({ title, mapData, icon, gradientFrom, gradientTo }: Brain
 
             {/* Hover overlay */}
             <div className={cn(
-              'absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent',
+              'absolute inset-0 bg-gradient-to-t from-bg-base/80 via-transparent to-transparent',
               'flex items-end justify-center pb-3',
               'transition-opacity duration-500',
               isHovered ? 'opacity-100' : 'opacity-0'
             )}>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 rounded-full text-xs font-medium text-slate-700">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-elevated/90 rounded-full text-xs font-medium text-text-primary border border-white/[0.08]">
                 <ZoomIn className="w-3 h-3" />
                 View Details
               </div>
@@ -97,14 +97,14 @@ function BrainMapPanel({ title, mapData, icon, gradientFrom, gradientTo }: Brain
 
       {/* Top Regions Footer */}
       {mapData && mapData.top_regions.length > 0 && (
-        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100">
-          <p className="text-xs text-slate-500">
-            <span className="font-medium text-slate-600">Top regions: </span>
+        <div className="px-4 py-2.5 bg-bg-surface border-t border-white/[0.08]">
+          <p className="text-xs text-text-muted">
+            <span className="font-medium text-text-secondary">Top regions: </span>
             {mapData.top_regions
               .slice(0, 3)
               .map((r, i) => (
                 <span key={r.region}>
-                  <span className="text-slate-700">{r.region}</span>
+                  <span className="text-text-primary">{r.region}</span>
                   {i < Math.min(mapData.top_regions.length, 3) - 1 && ', '}
                 </span>
               ))}
@@ -126,16 +126,16 @@ export function BrainMaps({ expressionMap, diseaseMap }: BrainMapsProps) {
       <BrainMapPanel
         title="Target Expression"
         mapData={expressionMap}
-        icon={<Dna className="w-3.5 h-3.5 text-white" />}
-        gradientFrom="from-cyan-500"
-        gradientTo="to-teal-600"
+        icon={<Dna className="w-3.5 h-3.5 text-bg-base" />}
+        gradientFrom="from-primary"
+        gradientTo="to-cyan-400"
       />
       <BrainMapPanel
         title="Disease Anatomy"
         mapData={diseaseMap}
-        icon={<Brain className="w-3.5 h-3.5 text-white" />}
-        gradientFrom="from-rose-500"
-        gradientTo="to-pink-600"
+        icon={<Brain className="w-3.5 h-3.5 text-bg-base" />}
+        gradientFrom="from-confidence-low"
+        gradientTo="to-rose-400"
       />
     </div>
   );

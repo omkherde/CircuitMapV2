@@ -7,9 +7,11 @@ function Progress({
   className,
   value,
   indicatorClassName,
+  duration = 1000,
   ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root> & {
   indicatorClassName?: string
+  duration?: number
 }) {
   const [displayValue, setDisplayValue] = React.useState(0)
 
@@ -28,7 +30,7 @@ function Progress({
     <ProgressPrimitive.Root
       data-slot="progress"
       className={cn(
-        "relative h-2 w-full overflow-hidden rounded-full bg-slate-100",
+        "relative h-2 w-full overflow-hidden rounded-full bg-bg-surface",
         className
       )}
       {...props}
@@ -36,10 +38,13 @@ function Progress({
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
         className={cn(
-          "h-full w-full flex-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all duration-1000 ease-out",
+          "h-full w-full flex-1 rounded-full bg-gradient-to-r from-primary to-cyan-400 ease-out",
           indicatorClassName
         )}
-        style={{ transform: `translateX(-${100 - displayValue}%)` }}
+        style={{
+          transform: `translateX(-${100 - displayValue}%)`,
+          transition: `transform ${duration}ms ease-out`
+        }}
       />
     </ProgressPrimitive.Root>
   )

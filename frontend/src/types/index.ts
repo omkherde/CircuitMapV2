@@ -55,11 +55,18 @@ export interface BrainRegion {
   value?: number;
 }
 
+// Colormap types for 3D visualization
+export type ColormapType = 'viridis' | 'inferno';
+
 // Brain map event
 export interface BrainMapEvent extends BaseEvent {
   type: 'brain_map';
   map_type: 'expression' | 'disease';
   image_url: string;
+  // Fields for 3D rendering:
+  parcellated_values?: Record<string, number>;
+  colormap?: ColormapType;
+  value_range?: [number, number];
   top_regions: BrainRegion[];
 }
 

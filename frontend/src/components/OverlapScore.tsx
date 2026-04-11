@@ -11,9 +11,9 @@ interface OverlapScoreProps {
 
 export function OverlapScore({ data }: OverlapScoreProps) {
   const getPercentileColor = (percentile: number) => {
-    if (percentile >= 75) return 'from-emerald-500 to-teal-500';
-    if (percentile >= 50) return 'from-amber-500 to-orange-500';
-    return 'from-red-500 to-rose-500';
+    if (percentile >= 75) return 'from-confidence-high to-emerald-400';
+    if (percentile >= 50) return 'from-confidence-moderate to-amber-400';
+    return 'from-confidence-low to-rose-400';
   };
 
   const getBadgeVariant = (percentile: number) => {
@@ -38,10 +38,10 @@ export function OverlapScore({ data }: OverlapScoreProps) {
     <Card className="overflow-hidden animate-fade-in">
       <CardHeader className="py-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-            <GitCompareArrows className="w-3.5 h-3.5 text-white" />
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary to-cyan-400 flex items-center justify-center">
+            <GitCompareArrows className="w-3.5 h-3.5 text-bg-base" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
             Spatial Overlap
           </h2>
         </div>
@@ -51,10 +51,10 @@ export function OverlapScore({ data }: OverlapScoreProps) {
         {!data ? (
           // Empty state
           <div className="flex flex-col items-center justify-center py-6 gap-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-              <GitCompareArrows className="w-6 h-6 text-slate-300" />
+            <div className="w-12 h-12 rounded-full bg-bg-surface flex items-center justify-center">
+              <GitCompareArrows className="w-6 h-6 text-text-muted" />
             </div>
-            <p className="text-sm text-slate-400 text-center">
+            <p className="text-sm text-text-muted text-center">
               Awaiting overlap calculation...
             </p>
           </div>
@@ -63,7 +63,7 @@ export function OverlapScore({ data }: OverlapScoreProps) {
             {/* Main score display */}
             <div className="flex items-center justify-between">
               <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-bold text-slate-900 animate-count-up">
+                <span className="text-4xl font-bold text-text-primary animate-count-up">
                   r = {data.r.toFixed(2)}
                 </span>
                 <Badge variant={getBadgeVariant(data.percentile)}>
@@ -72,21 +72,21 @@ export function OverlapScore({ data }: OverlapScoreProps) {
               </div>
               <div className={cn(
                 'w-10 h-10 rounded-full flex items-center justify-center',
-                data.percentile >= 75 ? 'bg-emerald-100 text-emerald-600' :
-                data.percentile >= 50 ? 'bg-amber-100 text-amber-600' :
-                'bg-red-100 text-red-600'
+                data.percentile >= 75 ? 'bg-confidence-high/10 text-confidence-high' :
+                data.percentile >= 50 ? 'bg-confidence-moderate/10 text-confidence-moderate' :
+                'bg-confidence-low/10 text-confidence-low'
               )}>
                 {getTrendIcon(data.percentile)}
               </div>
             </div>
 
             {/* Interpretation */}
-            <p className="text-sm text-slate-600 font-medium">
+            <p className="text-sm text-text-secondary font-medium">
               {getInterpretation(data.percentile)}
             </p>
 
             {/* Label */}
-            <p className="text-sm text-slate-500">{data.label}</p>
+            <p className="text-sm text-text-muted">{data.label}</p>
 
             {/* Progress bar */}
             <div className="space-y-2">
@@ -97,9 +97,9 @@ export function OverlapScore({ data }: OverlapScoreProps) {
               />
 
               {/* Percentile markers */}
-              <div className="flex justify-between text-xs text-slate-400">
+              <div className="flex justify-between text-xs text-text-muted">
                 <span>0%</span>
-                <span className="text-slate-500 font-medium">50%</span>
+                <span className="text-text-secondary font-medium">50%</span>
                 <span>100%</span>
               </div>
             </div>

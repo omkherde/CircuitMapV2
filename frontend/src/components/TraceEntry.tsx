@@ -85,7 +85,7 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
     switch (event.type) {
       case 'agent_thought':
         return (
-          <p className="text-sm text-slate-700 leading-relaxed">
+          <p className="text-sm text-text-secondary leading-relaxed">
             {event.content}
           </p>
         );
@@ -93,10 +93,10 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
       case 'tool_call':
         return (
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-blue-700">
+            <span className="text-sm font-semibold text-trace-tool-call">
               {event.tool}
             </span>
-            <code className="text-xs text-blue-600/80 bg-blue-50 px-2 py-1 rounded font-mono break-all">
+            <code className="text-xs text-trace-tool-call/80 bg-trace-tool-call/10 px-2 py-1 rounded font-mono break-all border border-trace-tool-call/20">
               {JSON.stringify(event.input)}
             </code>
           </div>
@@ -105,10 +105,10 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
       case 'tool_result':
         return (
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-emerald-700">
+            <span className="text-sm font-semibold text-trace-tool-result">
               {event.tool}
             </span>
-            <span className="text-sm text-emerald-600">
+            <span className="text-sm text-trace-tool-result/80">
               {event.summary}
             </span>
           </div>
@@ -117,7 +117,7 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
       case 'confidence_update':
         return (
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-700">
+            <span className="text-sm font-medium text-text-secondary">
               {event.dimension}:
             </span>
             <Badge variant={getBadgeVariant(event.level)}>
@@ -128,21 +128,21 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
 
       case 'brain_map':
         return (
-          <span className="text-sm text-purple-700 font-medium">
-            Brain map generated: <span className="text-purple-600">{event.map_type}</span>
+          <span className="text-sm text-accent font-medium">
+            Brain map generated: <span className="text-text-primary">{event.map_type}</span>
           </span>
         );
 
       case 'overlap_score':
         return (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-indigo-700 font-medium">
+            <span className="text-sm text-primary font-medium">
               Overlap calculated:
             </span>
-            <span className="text-sm font-mono font-semibold text-indigo-600">
+            <span className="text-sm font-mono font-semibold text-text-primary">
               r = {event.r.toFixed(2)}
             </span>
-            <Badge variant="pending">
+            <Badge variant="primary">
               p{event.percentile}
             </Badge>
           </div>
@@ -150,21 +150,21 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
 
       case 'report_ready':
         return (
-          <span className="text-sm text-emerald-700 font-semibold">
+          <span className="text-sm text-confidence-high font-semibold">
             Validation report ready
           </span>
         );
 
       case 'pdf_ready':
         return (
-          <span className="text-sm text-emerald-700 font-semibold">
+          <span className="text-sm text-confidence-high font-semibold">
             PDF ready for download
           </span>
         );
 
       case 'error':
         return (
-          <span className="text-sm text-red-600 font-medium">
+          <span className="text-sm text-confidence-low font-medium">
             Error: {event.message}
           </span>
         );
@@ -185,7 +185,7 @@ export function TraceEntry({ event, isLast = false }: TraceEntryProps) {
           {getIcon()}
         </div>
         {!isLast && (
-          <div className="w-0.5 flex-1 min-h-[8px] bg-gradient-to-b from-slate-200 to-slate-100" />
+          <div className="w-0.5 flex-1 min-h-[8px] bg-gradient-to-b from-white/10 to-transparent" />
         )}
       </div>
 

@@ -98,7 +98,7 @@ async def precompute_scenario(scenario: dict) -> None:
         json.dump(events_to_save, f, indent=2, default=str)
     print(f"\n  Saved {len(events_to_save)} events to {output_json}")
 
-    # Copy brain map PNGs from session dir to demo dir
+    # Copy brain map PNGs and PDF from session dir to demo dir
     sessions_dir = os.getenv("SESSIONS_DIR", "./sessions")
     for map_type in ["expression", "disease"]:
         src = os.path.join(sessions_dir, session_id, f"{map_type}.png")
@@ -108,6 +108,15 @@ async def precompute_scenario(scenario: dict) -> None:
             print(f"  Copied: {dst}")
         else:
             print(f"  WARNING: {src} not found — map may not have been generated")
+
+    # Copy generated PDF to demo cache
+    pdf_files = list(Path(os.path.join(sessions_dir, session_id)).glob("*.pdf"))
+    if pdf_files:
+        pdf_dst = os.path.join(DEMO_DIR, f"{scenario['name']}.pdf")
+        shutil.copy2(str(pdf_files[0]), pdf_dst)
+        print(f"  Copied: {pdf_dst}")
+    else:
+        print(f"  NOTE: No PDF in session dir — demo PDF will be generated on-the-fly on first request")
 
 
 async def main():

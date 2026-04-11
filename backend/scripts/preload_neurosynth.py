@@ -1,171 +1,152 @@
 """
-scripts/preload_neurosynth.py — Download Neurosynth 0.3.x database.
+scripts/preload_neurosynth.py — Download Neurosynth v7 dataset.
 
-neurosynth.utils.download() does not exist in v0.3.7. This script
-downloads database.txt.gz and features.txt.gz directly from the
-neurosynth-data GitHub repository and builds the Dataset pickle.
+Neurosynth restructured to a new format in 2019; the old database.txt /
+features.txt files no longer exist. This script downloads the v7 files:
+
+  coordinates.tsv     — MNI activation coordinates per study
+  metadata.tsv        — study metadata (PMID, year, journal, ...)
+  features.npz        — sparse TF-IDF term-weight matrix (studies × vocab)
+  vocabulary.txt      — term at each column index of features.npz
 
 Run from backend/:
     python scripts/preload_neurosynth.py
 """
-import os
-import sys
 import gzip
+import os
+import pickle
 import shutil
+import sys
 import urllib.request
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
 load_dotenv()
 
 DATA_DIR = os.getenv("NEUROSYNTH_DATA_DIR", "./cache/neurosynth_data")
 os.makedirs(DATA_DIR, exist_ok=True)
-
 print(f"Neurosynth data directory: {os.path.abspath(DATA_DIR)}")
 
-# neurosynth-data GitHub repository — these files are compatible with 0.3.x
-BASE_URL = "https://github.com/neurosynth/neurosynth-data/raw/master/current_data.tar.gz"
-FALLBACK_FILES = {
-    "database.txt.gz": [
-        "https://github.com/neurosynth/neurosynth-data/raw/master/data/database.txt.gz",
-        "https://raw.githubusercontent.com/neurosynth/neurosynth-data/master/data/database.txt.gz",
-    ],
-    "features.txt.gz": [
-        "https://github.com/neurosynth/neurosynth-data/raw/master/data/features.txt.gz",
-        "https://raw.githubusercontent.com/neurosynth/neurosynth-data/master/data/features.txt.gz",
-    ],
+BASE = "https://raw.githubusercontent.com/neurosynth/neurosynth-data/master"
+FILES = {
+    "coordinates.tsv.gz": f"{BASE}/data-neurosynth_version-7_coordinates.tsv.gz",
+    "metadata.tsv.gz":    f"{BASE}/data-neurosynth_version-7_metadata.tsv.gz",
+    "features.npz":       f"{BASE}/data-neurosynth_version-7_vocab-terms_source-abstract_type-tfidf_features.npz",
+    "vocabulary.txt":     f"{BASE}/data-neurosynth_version-7_vocab-terms_vocabulary.txt",
 }
 
-db_path = os.path.join(DATA_DIR, "database.txt")
-feat_path = os.path.join(DATA_DIR, "features.txt")
 
-
-def download_file(url: str, dest: str) -> bool:
-    """Download url to dest. Returns True on success."""
-    print(f"  Downloading from: {url}")
+def download(url: str, dest: str) -> bool:
+    print(f"  GET {url}")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=120) as resp, open(dest, 'wb') as f:
-            total = int(resp.headers.get('Content-Length', 0))
+        with urllib.request.urlopen(req, timeout=180) as resp, open(dest, "wb") as fh:
+            total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
-            chunk = 65536
-            while True:
-                data = resp.read(chunk)
-                if not data:
-                    break
-                f.write(data)
-                downloaded += len(data)
+            while chunk := resp.read(65536):
+                fh.write(chunk)
+                downloaded += len(chunk)
                 if total:
-                    pct = downloaded / total * 100
-                    print(f"  {downloaded:,} / {total:,} bytes ({pct:.0f}%)", end='\r')
+                    print(f"  {downloaded:,}/{total:,} ({100*downloaded//total}%)", end="\r")
         print()
         return True
-    except Exception as e:
-        print(f"  Failed: {e}")
+    except Exception as exc:
+        print(f"  FAILED: {exc}")
         return False
 
 
-def try_download_via_tarball() -> bool:
-    """Try downloading the combined tarball."""
-    dest_tar = os.path.join(DATA_DIR, "current_data.tar.gz")
-    print("Trying combined tarball download...")
-    if not download_file(BASE_URL, dest_tar):
-        return False
-    try:
-        import tarfile
-        print("Extracting tarball...")
-        with tarfile.open(dest_tar) as tf:
-            tf.extractall(DATA_DIR)
-        # Locate extracted files
-        for root, _, files in os.walk(DATA_DIR):
-            for fname in files:
-                fpath = os.path.join(root, fname)
-                if fname == "database.txt" and not os.path.exists(db_path):
-                    shutil.copy(fpath, db_path)
-                elif fname == "features.txt" and not os.path.exists(feat_path):
-                    shutil.copy(fpath, feat_path)
-        return os.path.exists(db_path) and os.path.exists(feat_path)
-    except Exception as e:
-        print(f"Tarball extraction failed: {e}")
-        return False
+# ── Download files ──────────────────────────────────────────────────────────
 
+print("\nStep 1: Downloading Neurosynth v7 data files...")
+for filename, url in FILES.items():
+    dest_gz  = os.path.join(DATA_DIR, filename)
+    dest_txt = dest_gz.replace(".gz", "") if filename.endswith(".gz") else dest_gz
 
-def download_individual_files() -> bool:
-    """Download and unpack database.txt.gz and features.txt.gz individually."""
-    for gz_name, urls in FALLBACK_FILES.items():
-        target_txt = os.path.join(DATA_DIR, gz_name.replace(".gz", ""))
-        if os.path.exists(target_txt) and os.path.getsize(target_txt) > 10_000:
-            print(f"  {gz_name}: already present, skipping")
-            continue
+    if os.path.exists(dest_txt) and os.path.getsize(dest_txt) > 1000:
+        print(f"  {filename}: already present, skipping")
+        continue
 
-        gz_path = os.path.join(DATA_DIR, gz_name)
-        success = False
-        for url in urls:
-            if download_file(url, gz_path):
-                success = True
-                break
-
-        if not success:
-            print(f"  ERROR: Could not download {gz_name}")
-            return False
-
-        # Decompress
-        print(f"  Decompressing {gz_name}...")
-        try:
-            with gzip.open(gz_path, 'rb') as f_in, open(target_txt, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-            os.remove(gz_path)
-            print(f"  {target_txt}: {os.path.getsize(target_txt):,} bytes")
-        except Exception as e:
-            print(f"  Decompression failed: {e}")
-            return False
-
-    return os.path.exists(db_path) and os.path.exists(feat_path)
-
-
-# Step 1: Download data files
-print("\nStep 1: Downloading Neurosynth database files...")
-
-if os.path.exists(db_path) and os.path.getsize(db_path) > 10_000 \
-        and os.path.exists(feat_path) and os.path.getsize(feat_path) > 10_000:
-    print("  Data files already present.")
-else:
-    ok = download_individual_files()
-    if not ok:
-        ok = try_download_via_tarball()
-    if not ok:
-        print("\nERROR: Could not download Neurosynth data.")
-        print("Manual fallback: download database.txt and features.txt from")
-        print("  https://github.com/neurosynth/neurosynth-data/tree/master/data")
-        print(f"and place them in: {os.path.abspath(DATA_DIR)}")
+    if not download(url, dest_gz):
+        print(f"\nERROR: could not download {filename}. Check internet connection.")
         sys.exit(1)
 
-print(f"  database.txt: {os.path.getsize(db_path):,} bytes")
-print(f"  features.txt: {os.path.getsize(feat_path):,} bytes")
+    if filename.endswith(".gz"):
+        print(f"  Decompressing {filename}...")
+        with gzip.open(dest_gz, "rb") as fin, open(dest_txt, "wb") as fout:
+            shutil.copyfileobj(fin, fout)
+        os.remove(dest_gz)
+        print(f"  → {dest_txt} ({os.path.getsize(dest_txt):,} bytes)")
 
-# Step 2: Build and save Dataset
-print("\nStep 2: Building Neurosynth Dataset (this takes a few minutes)...")
-try:
-    from neurosynth.base.dataset import Dataset
-    dataset = Dataset(db_path, feat_path)
+# ── Build and pickle the dataset ────────────────────────────────────────────
 
-    pkl_path = os.path.join(DATA_DIR, "dataset.pkl")
-    dataset.save(pkl_path)
-    print(f"  Dataset saved to: {pkl_path}")
+print("\nStep 2: Building dataset index...")
 
-    # Verify key terms
-    print("\nStep 3: Verifying key terms:")
-    for term in ['alzheimer', 'schizophrenia', 'depression', 'parkinson']:
-        try:
-            studies = dataset.get_studies(features=term, frequency_threshold=0.001)
-            print(f"  '{term}': {len(studies)} studies")
-        except Exception as e:
-            print(f"  '{term}': ERROR - {e}")
+import numpy as np
+import pandas as pd
+import scipy.sparse
 
-    print("\nNeurosynth preload COMPLETE")
-except Exception as e:
-    print(f"Dataset build failed: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+coords_path   = os.path.join(DATA_DIR, "coordinates.tsv")
+metadata_path = os.path.join(DATA_DIR, "metadata.tsv")
+features_path = os.path.join(DATA_DIR, "features.npz")
+vocab_path    = os.path.join(DATA_DIR, "vocabulary.txt")
+
+print("  Loading coordinates...")
+coords_df = pd.read_csv(coords_path, sep="\t")
+# Normalise column names — v7 uses 'id', 'x', 'y', 'z'
+coords_df.columns = [c.lower() for c in coords_df.columns]
+if "space" in coords_df.columns:
+    # Keep only MNI-space coordinates
+    coords_df = coords_df[coords_df["space"].str.upper() == "MNI"].copy()
+print(f"  Coordinates: {len(coords_df):,} activations")
+
+print("  Loading metadata...")
+meta_df = pd.read_csv(metadata_path, sep="\t")
+meta_df.columns = [c.lower() for c in meta_df.columns]
+# Canonical study-id column name across Neurosynth v7 variants
+id_col = next((c for c in meta_df.columns if c in ("id", "pmid", "study_id")), meta_df.columns[0])
+study_ids = meta_df[id_col].astype(str).tolist()
+study_id_to_idx = {sid: i for i, sid in enumerate(study_ids)}
+print(f"  Studies: {len(study_ids):,}")
+
+print("  Loading features matrix...")
+features = scipy.sparse.load_npz(features_path)
+print(f"  Features matrix: {features.shape} (studies × terms)")
+
+print("  Loading vocabulary...")
+with open(vocab_path) as fh:
+    vocabulary = [line.strip() for line in fh if line.strip()]
+print(f"  Vocabulary: {len(vocabulary):,} terms")
+
+# Ensure shapes align
+assert features.shape[0] == len(study_ids), (
+    f"Feature rows ({features.shape[0]}) != study count ({len(study_ids)})"
+)
+assert features.shape[1] == len(vocabulary), (
+    f"Feature cols ({features.shape[1]}) != vocab size ({len(vocabulary)})"
+)
+
+dataset = {
+    "coords":          coords_df,
+    "features":        features,
+    "vocabulary":      vocabulary,
+    "study_ids":       study_ids,
+    "study_id_to_idx": study_id_to_idx,
+}
+
+pkl_path = os.path.join(DATA_DIR, "dataset.pkl")
+print(f"\n  Saving to {pkl_path} ...")
+with open(pkl_path, "wb") as fh:
+    pickle.dump(dataset, fh, protocol=4)
+print(f"  Saved ({os.path.getsize(pkl_path):,} bytes)")
+
+# ── Quick verification ───────────────────────────────────────────────────────
+
+print("\nStep 3: Verification — activations near hippocampus (-24, -20, -18):")
+rx, ry, rz = -24.0, -20.0, -18.0
+coord_arr = coords_df[["x", "y", "z"]].values.astype(float)
+dists = np.sqrt(np.sum((coord_arr - [rx, ry, rz]) ** 2, axis=1))
+nearby = coords_df.iloc[dists <= 10]
+print(f"  {len(nearby):,} activations within 10 mm of hippocampus_L")
+
+print("\nNeurosynth v7 preload COMPLETE")

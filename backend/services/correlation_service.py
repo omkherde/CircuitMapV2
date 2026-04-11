@@ -21,6 +21,20 @@ def get_parcellated_map(map_id: str) -> Optional[dict[str, float]]:
     return _map_store.get(map_id)
 
 
+def cleanup_session_maps(session_id: str) -> None:
+    """Evict all maps whose IDs are prefixed with session_id.
+
+    Map IDs are constructed as ``{session_id}_expression_{gene}`` and
+    ``{session_id}_disease_{term}`` inside the service layer, so a prefix
+    match is sufficient to target exactly the maps belonging to one session.
+    Call this from the session finalizer to prevent unbounded memory growth.
+    """
+    prefix = f"{session_id}_"
+    keys_to_remove = [k for k in _map_store if k.startswith(prefix)]
+    for k in keys_to_remove:
+        del _map_store[k]
+
+
 def compute_overlap(map1_id: str, map2_id: str, label: str) -> dict:
     """
     Compute spatial Pearson correlation between two stored brain maps.

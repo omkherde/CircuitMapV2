@@ -29,7 +29,16 @@ def ahba_data_ready() -> bool:
 
 
 def _load_donor_metadata() -> list[dict]:
-    """Load lightweight donor metadata needed for per-gene aggregation."""
+    """
+    Load donor metadata for per-gene aggregation.
+
+    Each entry contains:
+      expr_path : Path to MicroarrayExpression.csv
+      regions   : pd.Series of structure names (for region-name aggregation)
+      probes    : pd.DataFrame with probe_id → gene_symbol mapping
+      mni_coords: np.ndarray of shape (n_samples, 3) — MNI x/y/z per sample
+                  Used by _parcellate_by_mni_coords for proper spatial alignment.
+    """
     global _donor_metadata_cache
     if _donor_metadata_cache is None:
         donor_dirs = sorted(Path(DATA_DIR).glob("microarray/normalized_microarray_donor*"))
@@ -44,7 +53,7 @@ def _load_donor_metadata() -> list[dict]:
 
             sample_annot = pd.read_csv(
                 sample_path,
-                usecols=["structure_name", "structure_acronym"]
+                usecols=["structure_name", "structure_acronym", "mni_x", "mni_y", "mni_z"]
             )
             regions = (
                 sample_annot["structure_name"]
@@ -52,6 +61,9 @@ def _load_donor_metadata() -> list[dict]:
                 .astype(str)
                 .str.strip()
             )
+            # MNI coordinates — shape (n_samples, 3)
+            mni_coords = sample_annot[["mni_x", "mni_y", "mni_z"]].to_numpy(dtype=float)
+
             probes = pd.read_csv(
                 probes_path,
                 usecols=["probe_id", "gene_symbol"]
@@ -61,6 +73,7 @@ def _load_donor_metadata() -> list[dict]:
                 "expr_path": expr_path,
                 "regions": regions,
                 "probes": probes,
+                "mni_coords": mni_coords,
             })
 
         _donor_metadata_cache = donors
@@ -195,11 +208,13 @@ def get_expression_map(gene_name: str, session_id: str) -> dict:
 
     map_id = f"{session_id}_expression_{gene_name}"
 
-    # Store for correlation
+    # Build an ROI-parcellated map using MNI spatial lookup so that the region
+    # labels match exactly the 20 neurosynth_service ROI coordinates.
+    # This replaces the old fuzzy string-matching approach and restores proper
+    # spatial alignment for the Pearson correlation computation.
     from services.correlation_service import store_parcellated_map
-    # Also store using simplified region keys that match the neurosynth ROI coords
-    simplified = _simplify_to_roi_keys(parcellated)
-    store_parcellated_map(map_id, simplified)
+    roi_parcellated = _parcellate_by_mni_coords(gene_name)
+    store_parcellated_map(map_id, roi_parcellated)
 
     return {
         "gene_name": gene_name,
@@ -212,45 +227,79 @@ def get_expression_map(gene_name: str, session_id: str) -> dict:
     }
 
 
-def _simplify_to_roi_keys(parcellated: dict) -> dict:
+def _parcellate_by_mni_coords(gene_name: str, radius_mm: float = 15.0) -> dict[str, float]:
     """
-    Map AHBA region names to the ROI coordinate keys used by neurosynth_service.
-    Returns a dict with standardized keys for cross-service correlation.
+    Parcellate AHBA expression to the 20 standard ROI coordinates using spatial
+    nearest-neighbour averaging.
+
+    For each ROI (from neurosynth_service.ROI_COORDS), we find all AHBA
+    microarray samples within `radius_mm` millimetres and average their
+    expression.  This produces DK-compatible spatial alignment without relying
+    on fragile region-name string matching.
+
+    Returns a dict keyed by ROI label with values normalised to [0, 1].
+    Falls back to zero-filled ROI dict if no AHBA data is loaded.
     """
-    ROI_MAP = {
-        "hippocampus_L": ["hippocampus", "Left-Hippocampus", "ctx-lh-entorhinal"],
-        "hippocampus_R": ["hippocampus", "Right-Hippocampus"],
-        "entorhinal_L": ["entorhinal", "ctx-lh-entorhinal", "Left-Amygdala"],
-        "entorhinal_R": ["entorhinal", "ctx-rh-entorhinal"],
-        "prefrontal_dlPFC_L": ["superiorfrontal", "rostralmiddlefrontal", "ctx-lh-rostralmiddlefrontal"],
-        "prefrontal_dlPFC_R": ["superiorfrontal", "rostralmiddlefrontal", "ctx-rh-rostralmiddlefrontal"],
-        "anterior_cingulate": ["caudalanteriorcingulate", "rostralanteriorcingulate", "ctx-lh-caudalanteriorcingulate"],
-        "amygdala_L": ["amygdala", "Left-Amygdala"],
-        "amygdala_R": ["amygdala", "Right-Amygdala"],
-        "striatum_L": ["putamen", "caudate", "Left-Putamen"],
-        "striatum_R": ["putamen", "caudate", "Right-Putamen"],
-        "thalamus_L": ["thalamus", "Left-Thalamus-Proper"],
-        "thalamus_R": ["thalamus", "Right-Thalamus-Proper"],
-        "insula_L": ["insula", "ctx-lh-insula"],
-        "insula_R": ["insula", "ctx-rh-insula"],
-        "cerebellum_L": ["cerebellum", "Left-Cerebellum-Cortex"],
-        "cerebellum_R": ["cerebellum", "Right-Cerebellum-Cortex"],
-        "occipital_L": ["lateraloccipital", "ctx-lh-lateraloccipital"],
-        "occipital_R": ["lateraloccipital", "ctx-rh-lateraloccipital"],
-        "parietal": ["superiorparietal", "inferiorparietal", "ctx-lh-superiorparietal"],
-    }
+    from services.neurosynth_service import ROI_COORDS
 
-    result = {}
-    parcellated_lower = {k.lower(): v for k, v in parcellated.items()}
+    gene_key = gene_name.upper().strip()
 
-    for roi_key, search_terms in ROI_MAP.items():
-        best_val = 0.0
-        for term in search_terms:
-            for region_key, val in parcellated_lower.items():
-                if term.lower() in region_key:
-                    best_val = max(best_val, val)
-                    break
-        result[roi_key] = best_val
+    # Collect all (mni_coord, expression) pairs across donors
+    all_coords: list[np.ndarray] = []
+    all_expr: list[float] = []
+
+    for donor in _load_donor_metadata():
+        probes = donor["probes"]
+        probe_ids = set(
+            probes.loc[
+                probes["gene_symbol"].astype(str).str.upper() == gene_key,
+                "probe_id"
+            ]
+            .dropna()
+            .astype(int)
+            .tolist()
+        )
+        if not probe_ids:
+            continue
+
+        sample_means = _load_probe_sample_means(donor["expr_path"], probe_ids)
+        mni_coords = donor["mni_coords"]  # (n_samples, 3)
+
+        if sample_means is None or len(sample_means) != len(mni_coords):
+            continue
+
+        for coord, expr in zip(mni_coords, sample_means):
+            if not np.isnan(expr):
+                all_coords.append(coord)
+                all_expr.append(float(expr))
+
+    if not all_coords:
+        # No AHBA samples found for this gene — return zeros
+        return {roi: 0.0 for roi in ROI_COORDS}
+
+    coords_arr = np.array(all_coords)  # (N, 3)
+    expr_arr = np.array(all_expr)      # (N,)
+
+    result: dict[str, float] = {}
+    for roi_label, (rx, ry, rz) in ROI_COORDS.items():
+        # Euclidean distance from this ROI centre to every AHBA sample
+        dists = np.sqrt(np.sum((coords_arr - np.array([rx, ry, rz])) ** 2, axis=1))
+        mask = dists <= radius_mm
+        if mask.any():
+            # Inverse-distance weighted average for smoother interpolation
+            weights = 1.0 / (dists[mask] + 1e-3)
+            result[roi_label] = float(np.average(expr_arr[mask], weights=weights))
+        else:
+            # No sample within radius — use nearest single sample
+            nearest_idx = int(np.argmin(dists))
+            result[roi_label] = float(expr_arr[nearest_idx])
+
+    # Normalise to [0, 1]
+    values = np.array(list(result.values()))
+    v_min, v_max = values.min(), values.max()
+    if v_max > v_min:
+        for k in result:
+            result[k] = float((result[k] - v_min) / (v_max - v_min))
 
     return result
 

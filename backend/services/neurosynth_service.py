@@ -170,42 +170,66 @@ CURATED_DISEASE_PATTERNS = {
 
 
 def _get_dataset():
+    """
+    Load the Neurosynth v7 dataset.
+
+    Returns a dict with keys:
+      coords          — pd.DataFrame with columns [id, x, y, z]
+      features        — scipy.sparse matrix (n_studies × n_terms), TF-IDF weights
+      vocabulary      — list[str] mapping column index → term string
+      study_ids       — list[str] mapping row index → study id
+      study_id_to_idx — dict[str, int] reverse lookup
+      coord_arr       — np.ndarray (N, 3) of all activation coordinates (fast lookup)
+      coord_study_ids — list[str] study ID for each row in coord_arr
+    """
     global _dataset
-    if _dataset is None:
-        pkl_path = os.path.join(DATA_DIR, "dataset.pkl")
-        if os.path.exists(pkl_path):
-            try:
-                with open(pkl_path, 'rb') as f:
-                    _dataset = pickle.load(f)
-                return _dataset
-            except Exception:
-                pass  # Fall through to load from files
+    if _dataset is not None:
+        return _dataset
 
-        # Load from raw files
-        from neurosynth.base.dataset import Dataset
-        db_path = os.path.join(DATA_DIR, "database.txt")
-        feat_path = os.path.join(DATA_DIR, "features.txt")
+    pkl_path = os.path.join(DATA_DIR, "dataset.pkl")
+    if not os.path.exists(pkl_path):
+        return None
 
-        # Check alternate paths
-        if not os.path.exists(db_path):
-            alt = os.path.join(DATA_DIR, "data", "database.txt")
-            if os.path.exists(alt):
-                db_path = alt
-                feat_path = os.path.join(DATA_DIR, "data", "features.txt")
+    try:
+        with open(pkl_path, "rb") as fh:
+            raw = pickle.load(fh)
 
-        if not os.path.exists(db_path):
+        # Support both the new v7 dict format and any legacy object
+        if not isinstance(raw, dict):
             return None
 
-        _dataset = Dataset(db_path, feat_path)
-    return _dataset
+        import pandas as pd
+        import scipy.sparse
+
+        coords_df = raw["coords"]
+        features  = raw["features"]
+        vocab     = raw["vocabulary"]
+        study_ids = raw["study_ids"]
+        s2i       = raw["study_id_to_idx"]
+
+        # Pre-compute coordinate array for fast spatial queries
+        coord_arr = coords_df[["x", "y", "z"]].to_numpy(dtype=float)
+        # Study-id label for every activation row
+        id_col = next((c for c in coords_df.columns if c in ("id", "pmid", "study_id")), coords_df.columns[0])
+        coord_study_ids = coords_df[id_col].astype(str).tolist()
+
+        _dataset = {
+            "coords":          coords_df,
+            "features":        features,
+            "vocabulary":      vocab,
+            "study_ids":       study_ids,
+            "study_id_to_idx": s2i,
+            "coord_arr":       coord_arr,
+            "coord_study_ids": coord_study_ids,
+        }
+        return _dataset
+    except Exception:
+        return None
 
 
 def neurosynth_data_ready() -> bool:
-    """Return True when a real Neurosynth dataset is available on disk."""
-    pkl_path = os.path.join(DATA_DIR, "dataset.pkl")
-    db_path = os.path.join(DATA_DIR, "database.txt")
-    alt_db_path = os.path.join(DATA_DIR, "data", "database.txt")
-    return os.path.exists(pkl_path) or os.path.exists(db_path) or os.path.exists(alt_db_path)
+    """Return True when the Neurosynth v7 dataset pickle is present on disk."""
+    return os.path.exists(os.path.join(DATA_DIR, "dataset.pkl"))
 
 
 def _map_indication(indication: str) -> str:
@@ -225,117 +249,233 @@ def get_disease_map(indication: str, session_id: str) -> dict:
     """
     Get Neurosynth meta-analytic activation map for a disease/indication.
 
+    Primary path (v7 dataset loaded):
+      - Find studies whose TF-IDF weight for the disease term exceeds threshold
+      - For each of the 20 ROI coordinates, count activations within 10 mm
+        across those studies and normalise to [0, 1]
+      - This is a coordinate-density meta-analysis, equivalent to the classic
+        Neurosynth forward-inference (P(activation | term)) approach
+
+    Demo/offline fallback:
+      - CURATED_DISEASE_PATTERNS — hand-coded ROI values
+
     Args:
         indication: Disease name (e.g., "Alzheimer's disease")
         session_id: Session ID for output file naming
-
-    Returns:
-        dict with map_id, top_regions, n_studies, image_path
     """
     term = _map_indication(indication)
     dataset = _get_dataset()
 
-    if dataset is None:
-        fallback = _get_curated_disease_map(indication, term, session_id)
-        if fallback is not None:
-            return fallback
-        return {
-            "error": "Neurosynth dataset not loaded. Run scripts/preload_neurosynth.py first.",
-            "top_regions": [],
-            "map_id": None
-        }
+    if dataset is not None:
+        result = _disease_map_v7(dataset, indication, term, session_id)
+        if result is not None:
+            return result
 
-    try:
-        study_ids = dataset.get_studies(features=term, frequency_threshold=0.001)
-    except Exception as e:
-        # Try with higher threshold to reduce memory use
-        try:
-            study_ids = dataset.get_studies(features=term, frequency_threshold=0.005)
-        except Exception as e2:
-            return {
-                "error": f"Failed to get studies for '{term}': {e2}",
-                "top_regions": [],
-                "map_id": None
-            }
+    # Fallback — curated templates
+    fallback = _get_curated_disease_map(indication, term, session_id)
+    if fallback is not None:
+        return fallback
 
-    if not study_ids:
-        fallback = _get_curated_disease_map(indication, term, session_id)
-        if fallback is not None:
-            return fallback
-        return {
-            "error": f"No studies found for '{term}'. Try a simpler term.",
-            "top_regions": [],
-            "map_id": None
-        }
+    return {
+        "error": (
+            "Neurosynth dataset not loaded and no curated template for this indication. "
+            "Run scripts/preload_neurosynth.py to download the v7 dataset."
+        ),
+        "top_regions": [],
+        "map_id": None,
+    }
 
-    # Limit study count to avoid memory issues
-    if len(study_ids) > 500:
-        study_ids = study_ids[:500]
 
-    try:
-        from neurosynth.analysis import meta
-        ma = meta.MetaAnalysis(dataset, study_ids)
+def _disease_map_v7(dataset: dict, indication: str, term: str, session_id: str) -> dict | None:
+    """
+    Build a disease activation map from Neurosynth v7 data.
 
-        # Get pAgF image (posterior probability of activation given feature)
-        pAgF_img = None
-        for key in ma.images:
-            if 'pAgF' in key:
-                pAgF_img = ma.images[key]
-                break
-        if pAgF_img is None and ma.images:
-            pAgF_img = list(ma.images.values())[0]
+    Methodology:
+      1. Find the column index of `term` in the vocabulary.
+      2. Select studies whose TF-IDF weight for that term > 0.001.
+      3. For each ROI coordinate, count activations from those studies within
+         10 mm and normalise to produce a [0, 1] activation-frequency map.
+    """
+    import numpy as np
 
-    except Exception as e:
-        return {
-            "error": f"Meta-analysis failed for '{term}': {e}",
-            "top_regions": [],
-            "map_id": None
-        }
+    vocab = dataset["vocabulary"]
+    features = dataset["features"]
+    study_ids = dataset["study_ids"]
+    coord_arr = dataset["coord_arr"]          # (N_acts, 3)
+    coord_study_ids = dataset["coord_study_ids"]  # len == N_acts
 
-    # Generate PNG
-    image_path = _generate_disease_png(pAgF_img, session_id, term)
+    # Find matching term columns (partial match so "alzheimer" hits "alzheimer disease" etc.)
+    term_cols = [i for i, t in enumerate(vocab) if term.lower() in t.lower()]
+    if not term_cols:
+        return None
 
-    # Parcellate to ROI coords for correlation
-    parcellated = _parcellate_image_to_regions(pAgF_img)
+    # Sum TF-IDF weights across matching columns
+    import scipy.sparse
+    if scipy.sparse.issparse(features):
+        term_weights = np.asarray(features[:, term_cols].sum(axis=1)).flatten()
+    else:
+        term_weights = features[:, term_cols].sum(axis=1)
+
+    # Studies with meaningful weight for this term
+    threshold = 0.001
+    relevant_mask = term_weights > threshold
+    relevant_study_set = set(np.array(study_ids)[relevant_mask])
+
+    if not relevant_study_set:
+        return None
+
+    # Filter activation coordinates to relevant studies
+    relevant_act_mask = np.array([sid in relevant_study_set for sid in coord_study_ids])
+    relevant_coords = coord_arr[relevant_act_mask]  # (M, 3)
+
+    if len(relevant_coords) == 0:
+        return None
+
+    n_studies = int(relevant_mask.sum())
+
+    # Count activations within 10 mm of each ROI
+    parcellated: dict[str, float] = {}
+    for roi_label, (rx, ry, rz) in ROI_COORDS.items():
+        dists = np.sqrt(np.sum((relevant_coords - np.array([rx, ry, rz])) ** 2, axis=1))
+        parcellated[roi_label] = float((dists <= 10.0).sum())
+
+    # Normalise to [0, 1]
+    max_val = max(parcellated.values()) or 1.0
+    parcellated = {k: round(v / max_val, 4) for k, v in parcellated.items()}
 
     map_id = f"{session_id}_disease_{term}"
+    image_path = _generate_disease_png_from_parcellated(parcellated, session_id, term)
 
     from services.correlation_service import store_parcellated_map
     store_parcellated_map(map_id, parcellated)
 
-    # Top regions by value
     top_regions = sorted(parcellated.items(), key=lambda x: x[1], reverse=True)[:10]
 
     return {
         "indication": indication,
         "neurosynth_term": term,
         "map_id": map_id,
-        "n_studies": len(study_ids),
-        "top_regions": [{"region": r, "value": round(v, 4)} for r, v in top_regions],
+        "n_studies": n_studies,
+        "top_regions": [{"region": r, "value": v} for r, v in top_regions],
         "image_path": image_path,
-        "source": "Neurosynth meta-analysis"
+        "source": f"Neurosynth v7 coordinate-density meta-analysis ({n_studies} studies)",
     }
 
 
 def get_cognitive_associations(regions: list, top_n: int = 8) -> dict:
     """
-    Map brain regions to cognitive/behavioral functions via curated lookup.
+    Map brain regions to cognitive/behavioral functions.
 
-    Uses a lookup table for reliability and speed (Neurosynth decoder is too slow).
+    Primary path (when Neurosynth dataset is loaded):
+      - Map region labels to MNI coordinates from ROI_COORDS
+      - Find Neurosynth studies that activate within 10 mm of those coordinates
+      - Count feature-term frequencies across those studies
+      - Return the most common terms as cognitive associations
+
+    Demo/offline fallback:
+      - Curated region-function lookup table (fast, deterministic)
 
     Args:
-        regions: List of brain region names
+        regions: List of brain region names (matched against ROI_COORDS keys)
         top_n: Number of top associations to return
 
     Returns:
-        dict with cognitive_associations list
+        dict with cognitive_associations list and method field
+    """
+    dataset = _get_dataset()
+    if dataset is not None:
+        return _reverse_inference(regions, dataset, top_n)
+    return _curated_cognitive_associations(regions, top_n)
+
+
+def _reverse_inference(regions: list, dataset: dict, top_n: int) -> dict:
+    """
+    Neurosynth v7 reverse inference: studies activating near given ROIs →
+    summed TF-IDF term weights → top cognitive terms.
+
+    Methodology:
+      1. For each region label, look up its MNI coordinate in ROI_COORDS.
+      2. Find all activation rows within 10 mm.
+      3. Collect the unique study IDs from those activations.
+      4. Sum each study's TF-IDF feature vector across all relevant studies.
+      5. Return the terms with the highest summed weights.
+    """
+    import numpy as np
+
+    coord_arr       = dataset["coord_arr"]
+    coord_study_ids = dataset["coord_study_ids"]
+    study_id_to_idx = dataset["study_id_to_idx"]
+    features        = dataset["features"]
+    vocab           = dataset["vocabulary"]
+
+    # Resolve region names → MNI coordinates
+    query_coords = []
+    for region in regions:
+        key = region.lower().replace(" ", "_")
+        if key in ROI_COORDS:
+            query_coords.append(ROI_COORDS[key])
+        else:
+            for roi_key, roi_coord in ROI_COORDS.items():
+                parts = [p for p in key.split("_") if len(p) > 3]
+                if any(p in roi_key for p in parts):
+                    query_coords.append(roi_coord)
+                    break
+
+    if not query_coords:
+        return _curated_cognitive_associations(regions, top_n)
+
+    # Find studies with activations within 10 mm of any query coordinate
+    relevant_study_ids: set[str] = set()
+    for rx, ry, rz in query_coords:
+        dists = np.sqrt(np.sum((coord_arr - np.array([rx, ry, rz])) ** 2, axis=1))
+        nearby = np.array(coord_study_ids)[dists <= 10.0]
+        relevant_study_ids.update(nearby.tolist())
+
+    if not relevant_study_ids:
+        return _curated_cognitive_associations(regions, top_n)
+
+    # Map study IDs to row indices in the features matrix
+    row_indices = [study_id_to_idx[sid] for sid in relevant_study_ids if sid in study_id_to_idx]
+    if not row_indices:
+        return _curated_cognitive_associations(regions, top_n)
+
+    # Sum TF-IDF weights across relevant studies
+    import scipy.sparse
+    subset = features[row_indices, :]
+    if scipy.sparse.issparse(subset):
+        term_scores = np.asarray(subset.sum(axis=0)).flatten()
+    else:
+        term_scores = subset.sum(axis=0)
+
+    top_idx = np.argsort(term_scores)[::-1][:top_n]
+    max_score = float(term_scores[top_idx[0]]) if len(top_idx) > 0 else 1.0
+
+    return {
+        "queried_regions": regions,
+        "cognitive_associations": [
+            {
+                "function": vocab[i],
+                "score": round(float(term_scores[i]) / max_score, 3),
+                "frequency": int(term_scores[i]),
+            }
+            for i in top_idx
+            if term_scores[i] > 0
+        ],
+        "method": "Neurosynth v7 reverse inference (TF-IDF weighted, coordinate-based)",
+    }
+
+
+def _curated_cognitive_associations(regions: list, top_n: int) -> dict:
+    """
+    Curated region-function lookup table — used when Neurosynth dataset is not
+    loaded (demo / offline mode).
     """
     REGION_FUNCTION_MAP = {
         "hippocampus": ["episodic memory", "memory consolidation", "spatial navigation", "pattern separation"],
         "entorhinal": ["memory encoding", "grid cells", "spatial processing", "temporal lobe function"],
         "prefrontal": ["working memory", "cognitive control", "decision making", "executive function"],
         "dlpfc": ["working memory", "cognitive control", "executive function"],
-        "anterior cingulate": ["error monitoring", "cognitive control", "attention", "conflict detection"],
+        "anterior_cingulate": ["error monitoring", "cognitive control", "attention", "conflict detection"],
         "cingulate": ["error monitoring", "cognitive control", "attention"],
         "amygdala": ["fear processing", "emotional memory", "threat detection", "arousal"],
         "striatum": ["reward processing", "motor learning", "habit formation", "dopamine signaling"],
@@ -351,14 +491,14 @@ def get_cognitive_associations(regions: list, top_n: int = 8) -> dict:
         "limbic": ["emotion regulation", "memory", "motivation"],
     }
 
-    all_functions = []
+    from collections import Counter
+    all_functions: list[str] = []
     for region in regions:
         region_lower = region.lower()
         for key, functions in REGION_FUNCTION_MAP.items():
             if key in region_lower:
                 all_functions.extend(functions)
 
-    from collections import Counter
     counts = Counter(all_functions)
     top_functions = counts.most_common(top_n)
 
@@ -367,7 +507,7 @@ def get_cognitive_associations(regions: list, top_n: int = 8) -> dict:
         "cognitive_associations": [
             {"function": f, "frequency": c} for f, c in top_functions
         ],
-        "method": "curated region-function lookup table"
+        "method": "curated region-function lookup table (offline demo fallback)",
     }
 
 

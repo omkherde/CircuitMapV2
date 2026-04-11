@@ -12,22 +12,25 @@ CHEMBL_STATUS_URL = "https://www.ebi.ac.uk/chembl/api/data/status.json"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 
 LOCAL_TARGET_FALLBACKS = {
+    # Primary target is SUV39H1 (histone methyltransferase) per PRD §4 Scenario 1.
+    # Chaetocin's canonical mechanism is inhibition of SUV39H1-family HMTs;
+    # HIF1A activity is a downstream/secondary effect.
     "chaetocin": {
-        "primary_target": "HIF1A",
-        "protein_name": "Hypoxia-inducible factor 1-alpha",
-        "target_class": "Transcription factor",
-        "binding_affinity": 40.0,
+        "primary_target": "SUV39H1",
+        "protein_name": "Histone-lysine N-methyltransferase SUV39H1",
+        "target_class": "Histone methyltransferase",
+        "binding_affinity": 800.0,
         "affinity_type": "IC50",
-        "chembl_id": "CHEMBL4261",
+        "chembl_id": "CHEMBL1795118",
         "data_source": "Local fallback (offline)",
         "off_targets": [
             {
-                "gene_name": "SUV39H1",
-                "protein_name": "Histone-lysine N-methyltransferase SUV39H1",
-                "target_class": "Histone methyltransferase",
-                "binding_affinity": 800.0,
+                "gene_name": "HIF1A",
+                "protein_name": "Hypoxia-inducible factor 1-alpha",
+                "target_class": "Transcription factor",
+                "binding_affinity": 40.0,
                 "affinity_type": "IC50",
-                "chembl_id": "CHEMBL1795118",
+                "chembl_id": "CHEMBL4261",
                 "confidence": "fallback",
             },
             {
@@ -271,6 +274,12 @@ def resolve_target(query: str, query_type: str) -> dict:
     """
     Resolve drug molecule to primary CNS target(s).
 
+    Resolution order:
+      1. Live ChEMBL API (primary)
+      2. PubChem canonicalization → retry ChEMBL
+      3. LOCAL_TARGET_FALLBACKS (offline / demo fallback)
+      4. Unresolved result with error details
+
     Args:
         query: SMILES string or drug/compound name
         query_type: 'smiles' or 'name'
@@ -280,13 +289,10 @@ def resolve_target(query: str, query_type: str) -> dict:
         binding_affinity, affinity_type, chembl_id, data_source, off_targets, confidence
         On failure: {"error": "...", "targets": []}
     """
-    fallback = _resolve_local_fallback(query, query_type)
     normalized_query = query.strip()
-
-    if fallback is not None:
-        return fallback
-
     chembl_error = None
+
+    # ── 1. Try live ChEMBL API ─────────────────────────────────────────────────
     try:
         if not _service_available(CHEMBL_STATUS_URL):
             raise RuntimeError("ChEMBL service unavailable")
@@ -303,37 +309,29 @@ def resolve_target(query: str, query_type: str) -> dict:
             result["query_type"] = query_type
             return result
 
+        # ── 2. PubChem canonicalization → retry ChEMBL ─────────────────────
         alias_result, metadata = _resolve_via_pubchem_aliases(normalized_query, query_type, new_client)
         if alias_result and alias_result.get("primary_target"):
             alias_result["query"] = normalized_query
             alias_result["query_type"] = query_type
             return alias_result
 
-        resolution_note = result.get("error", "No target found from ChEMBL.")
-        if metadata:
-            return _build_unresolved_result(
-                normalized_query,
-                query_type,
-                note=(
-                    f"{resolution_note} PubChem recognized the molecule"
-                    + (f" as '{metadata.get('title')}'." if metadata.get("title") else ".")
-                ),
-                data_source="PubChem",
-                error=resolution_note,
-                resolved_name=metadata.get("title") or metadata.get("iupac_name"),
-                pubchem_cid=metadata.get("pubchem_cid"),
-            )
-        return _build_unresolved_result(
-            normalized_query,
-            query_type,
-            note=resolution_note,
-            data_source="ChEMBL",
-            error=resolution_note,
-        )
+        chembl_error = result.get("error", "No target found from ChEMBL.")
+
     except Exception as e:
         chembl_error = _short_error(e)
 
-    # Fall back to PubChem metadata if ChEMBL is unavailable or errored.
+    # ── 3. LOCAL_TARGET_FALLBACKS (offline / demo mode) ───────────────────────
+    # Only reached when both ChEMBL and PubChem are unavailable or returned no hits.
+    local = _resolve_local_fallback(normalized_query, query_type)
+    if local is not None:
+        local["note"] = (
+            f"ChEMBL unavailable ({chembl_error}). "
+            "Resolved from bundled offline demo data."
+        )
+        return local
+
+    # ── 4. Last resort: PubChem metadata only ────────────────────────────────
     try:
         pubchem_result = _resolve_via_pubchem(normalized_query, query_type)
         note = pubchem_result.get("note", "PubChem recognized the molecule but target resolution is unavailable.")

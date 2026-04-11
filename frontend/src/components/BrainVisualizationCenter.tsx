@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain, Dna, Layers, LayoutGrid, ZoomIn, TrendingUp, Download, Loader2, FileText, Box, Image } from 'lucide-react';
+import { Brain, Dna, Layers, LayoutGrid, ZoomIn, TrendingUp, Download, Loader2, FileText } from 'lucide-react';
 import type { BrainMapEvent, OverlapScoreEvent } from '../types';
 import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -7,11 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Brain3DViewer } from './Brain3DViewer';
 
 type ViewMode = 'side-by-side' | 'overlay';
-type RenderMode = '2d' | '3d';
-type View3DMode = 'expression' | 'disease' | 'overlay';
 
 interface BrainMapPanelProps {
   title: string;
@@ -126,22 +123,6 @@ function BrainMapPanel({ title, mapData, icon, iconColorClass, isLoading }: Brai
   );
 }
 
-interface ColorScaleLegendProps {
-  type: 'expression' | 'disease';
-}
-
-function ColorScaleLegend({ type }: ColorScaleLegendProps) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-text-muted">Low</span>
-      <div className={cn(
-        'flex-1 h-2 rounded-full',
-        type === 'expression' ? 'heatmap-viridis' : 'heatmap-inferno'
-      )} />
-      <span className="text-xs text-text-muted">High</span>
-    </div>
-  );
-}
 
 interface OverlayViewProps {
   expressionMap: BrainMapEvent | null;
@@ -280,8 +261,6 @@ export function BrainVisualizationCenter({
 }: BrainVisualizationCenterProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('side-by-side');
   const [overlayOpacity, setOverlayOpacity] = useState(50);
-  const [renderMode, setRenderMode] = useState<RenderMode>('3d');
-  const [view3DMode, setView3DMode] = useState<View3DMode>('expression');
 
   const handleExportPdf = () => {
     if (!pdfUrl) return;
@@ -339,150 +318,39 @@ export function BrainVisualizationCenter({
             </div>
           )}
 
-          {/* 2D/3D Render Mode Toggle */}
+          {/* View Mode Toggle */}
           <div className="flex items-center gap-1 bg-bg-surface rounded-lg p-1 border border-white/[0.08]">
             <button
-              onClick={() => setRenderMode('3d')}
+              onClick={() => setViewMode('side-by-side')}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                renderMode === '3d'
+                viewMode === 'side-by-side'
                   ? 'bg-primary/10 text-primary'
                   : 'text-text-muted hover:text-text-primary'
               )}
             >
-              <Box className="w-3.5 h-3.5" />
-              3D
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Side by Side
             </button>
             <button
-              onClick={() => setRenderMode('2d')}
+              onClick={() => setViewMode('overlay')}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                renderMode === '2d'
+                viewMode === 'overlay'
                   ? 'bg-primary/10 text-primary'
                   : 'text-text-muted hover:text-text-primary'
               )}
             >
-              <Image className="w-3.5 h-3.5" />
-              2D
+              <Layers className="w-3.5 h-3.5" />
+              Overlay
             </button>
-          </div>
-
-          {/* View Mode Toggle (2D: side-by-side/overlay, 3D: expression/disease/overlay) */}
-          <div className="flex items-center gap-1 bg-bg-surface rounded-lg p-1 border border-white/[0.08]">
-            {renderMode === '2d' ? (
-              <>
-                <button
-                  onClick={() => setViewMode('side-by-side')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    viewMode === 'side-by-side'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  Side by Side
-                </button>
-                <button
-                  onClick={() => setViewMode('overlay')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    viewMode === 'overlay'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  Overlay
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setView3DMode('expression')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    view3DMode === 'expression'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  <Dna className="w-3.5 h-3.5" />
-                  Expression
-                </button>
-                <button
-                  onClick={() => setView3DMode('disease')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    view3DMode === 'disease'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  <Brain className="w-3.5 h-3.5" />
-                  Disease
-                </button>
-                <button
-                  onClick={() => setView3DMode('overlay')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    view3DMode === 'overlay'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  Overlay
-                </button>
-              </>
-            )}
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col gap-4">
-        {renderMode === '3d' ? (
-          /* 3D View */
-          <div className="flex flex-col gap-4 flex-1">
-            <Brain3DViewer
-              expressionMap={expressionMap}
-              diseaseMap={diseaseMap}
-              viewMode={view3DMode}
-              overlayOpacity={overlayOpacity}
-              className="flex-1"
-            />
-
-            {/* Opacity Slider for 3D overlay mode */}
-            {view3DMode === 'overlay' && expressionMap && diseaseMap && (
-              <div className="flex items-center gap-4 px-2">
-                <div className="flex items-center gap-2">
-                  <Dna className="w-4 h-4 text-primary" />
-                  <span className="text-xs text-text-secondary">Expression</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={overlayOpacity}
-                  onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-                  className="flex-1 h-2 rounded-full appearance-none bg-bg-surface cursor-pointer
-                    [&::-webkit-slider-thumb]:appearance-none
-                    [&::-webkit-slider-thumb]:w-4
-                    [&::-webkit-slider-thumb]:h-4
-                    [&::-webkit-slider-thumb]:rounded-full
-                    [&::-webkit-slider-thumb]:bg-primary
-                    [&::-webkit-slider-thumb]:shadow-glow-primary
-                    [&::-webkit-slider-thumb]:cursor-pointer"
-                />
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-secondary">Disease</span>
-                  <Brain className="w-4 h-4 text-confidence-low" />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : viewMode === 'side-by-side' ? (
-          /* 2D Side-by-Side View */
+        {viewMode === 'side-by-side' ? (
+          /* Side-by-Side View */
           <div className="flex gap-4 flex-1">
             <BrainMapPanel
               title="Target Expression"
@@ -500,7 +368,7 @@ export function BrainVisualizationCenter({
             />
           </div>
         ) : (
-          /* 2D Overlay View */
+          /* Overlay View */
           <div className="flex flex-col gap-4 flex-1">
             <OverlayView
               expressionMap={expressionMap}
@@ -538,12 +406,6 @@ export function BrainVisualizationCenter({
             )}
           </div>
         )}
-
-        {/* Color Scale Legends */}
-        <div className="grid grid-cols-2 gap-4">
-          <ColorScaleLegend type="expression" />
-          <ColorScaleLegend type="disease" />
-        </div>
 
         {/* Overlap Score */}
         <OverlapScoreDisplay data={overlapScore} />

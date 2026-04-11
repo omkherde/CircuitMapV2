@@ -10,10 +10,9 @@ import {
   AlertTriangle,
   Lightbulb,
   Link2,
-  ClipboardList
+  ClipboardList,
 } from 'lucide-react';
 import type { ReportSections } from '../types';
-import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -24,78 +23,78 @@ import {
 } from '@/components/ui/accordion';
 
 interface SectionConfig {
-  key: keyof ReportSections;
+  keys: (keyof ReportSections)[];
+  value: string;
   label: string;
   icon: React.ReactNode;
-  color: string;
 }
 
 const SECTION_CONFIG: SectionConfig[] = [
   {
-    key: 'executive_summary',
+    keys: ['executive_summary'],
+    value: 'executive_summary',
     label: 'Executive Summary',
     icon: <ClipboardList className="w-4 h-4" />,
-    color: 'from-indigo-500 to-blue-600'
   },
   {
-    key: 'target_identification',
-    label: 'Target Identification',
+    keys: ['target_identification'],
+    value: 'target_identification',
+    label: 'Molecular Target Profile',
     icon: <Target className="w-4 h-4" />,
-    color: 'from-violet-500 to-purple-600'
   },
   {
-    key: 'expression_analysis',
-    label: 'Expression Analysis',
+    keys: ['expression_analysis'],
+    value: 'expression_analysis',
+    label: 'Brain Expression Analysis',
     icon: <Dna className="w-4 h-4" />,
-    color: 'from-cyan-500 to-teal-600'
   },
   {
-    key: 'disease_anatomy',
-    label: 'Disease Anatomy',
-    icon: <Brain className="w-4 h-4" />,
-    color: 'from-rose-500 to-pink-600'
-  },
-  {
-    key: 'spatial_overlap',
-    label: 'Spatial Overlap',
-    icon: <GitCompareArrows className="w-4 h-4" />,
-    color: 'from-amber-500 to-orange-600'
-  },
-  {
-    key: 'circuit_interpretation',
-    label: 'Circuit Interpretation',
+    keys: ['circuit_interpretation'],
+    value: 'circuit_interpretation',
+    label: 'Functional Circuit Context',
     icon: <Network className="w-4 h-4" />,
-    color: 'from-emerald-500 to-green-600'
   },
   {
-    key: 'literature_context',
-    label: 'Literature Context',
+    keys: ['spatial_overlap'],
+    value: 'spatial_overlap',
+    label: 'Target-Pathology Overlap',
+    icon: <GitCompareArrows className="w-4 h-4" />,
+  },
+  {
+    keys: ['off_target_risk', 'disease_anatomy'],
+    value: 'off_target_risk',
+    label: 'Off-Target Risk Assessment',
+    icon: <Brain className="w-4 h-4" />,
+  },
+  {
+    keys: ['literature_context'],
+    value: 'literature_context',
+    label: 'Literature Evidence Summary',
     icon: <BookOpen className="w-4 h-4" />,
-    color: 'from-blue-500 to-indigo-600'
   },
   {
-    key: 'confidence_assessment',
+    keys: ['confidence_assessment'],
+    value: 'confidence_assessment',
     label: 'Confidence Assessment',
     icon: <Shield className="w-4 h-4" />,
-    color: 'from-teal-500 to-cyan-600'
   },
   {
-    key: 'limitations',
-    label: 'Limitations',
+    keys: ['limitations'],
+    value: 'limitations',
+    label: 'Data Sources & Limitations',
     icon: <AlertTriangle className="w-4 h-4" />,
-    color: 'from-orange-500 to-red-600'
   },
   {
-    key: 'recommendations',
-    label: 'Recommendations',
+    keys: ['recommendations'],
+    value: 'recommendations',
+    label: 'Recommended Clinical Endpoints',
     icon: <Lightbulb className="w-4 h-4" />,
-    color: 'from-yellow-500 to-amber-600'
   },
   {
-    key: 'references',
-    label: 'References',
+    keys: ['preclinical_validation', 'references'],
+    value: 'preclinical_validation',
+    label: 'Pre-Clinical Validation Recommendations',
     icon: <Link2 className="w-4 h-4" />,
-    color: 'from-slate-500 to-gray-600'
   },
 ];
 
@@ -109,24 +108,23 @@ export function ReportPanel({ sections }: ReportPanelProps) {
       <Card className="overflow-hidden h-full animate-fade-in">
         <CardHeader className="py-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <FileText className="w-3.5 h-3.5 text-white" />
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-confidence-high to-emerald-400 flex items-center justify-center">
+              <FileText className="w-3.5 h-3.5 text-bg-base" />
             </div>
-            <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+            <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
               Validation Report
             </h2>
           </div>
         </CardHeader>
 
-        {/* Empty state */}
         <CardContent className="flex-1 flex flex-col items-center justify-center text-center min-h-[300px]">
-          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-            <FileText className="w-8 h-8 text-slate-300" />
+          <div className="w-16 h-16 rounded-full bg-bg-surface flex items-center justify-center mb-4">
+            <FileText className="w-8 h-8 text-text-muted" />
           </div>
-          <p className="text-sm text-slate-500 mb-2">
+          <p className="text-sm text-text-muted mb-2">
             Report will appear when validation completes
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-text-muted">
             The AI agent is analyzing your drug target
           </p>
         </CardContent>
@@ -134,43 +132,41 @@ export function ReportPanel({ sections }: ReportPanelProps) {
     );
   }
 
-  const availableSections = SECTION_CONFIG.filter(({ key }) => sections[key]);
-  const defaultOpenSections = ['executive_summary'];
+  const availableSections = SECTION_CONFIG.map((config) => ({
+    ...config,
+    content: config.keys.map((key) => sections[key]).find(Boolean),
+  })).filter((config) => config.content);
 
   return (
     <Card className="overflow-hidden h-full flex flex-col animate-fade-in-scale">
       <CardHeader className="py-3 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-            <FileText className="w-3.5 h-3.5 text-white" />
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-confidence-high to-emerald-400 flex items-center justify-center">
+            <FileText className="w-3.5 h-3.5 text-bg-base" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
             Validation Report
           </h2>
         </div>
       </CardHeader>
 
-      {/* Sections */}
       <ScrollArea className="flex-1">
         <div className="px-3 py-2">
-          <Accordion type="multiple" defaultValue={defaultOpenSections}>
-            {availableSections.map((config) => (
-              <AccordionItem key={config.key} value={config.key}>
+          <Accordion type="multiple" defaultValue={['executive_summary']}>
+            {availableSections.map((section) => (
+              <AccordionItem key={section.value} value={section.value}>
                 <AccordionTrigger>
                   <div className="flex items-center gap-2.5">
-                    <div className={cn(
-                      'w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br',
-                      config.color
-                    )}>
-                      <span className="text-white">{config.icon}</span>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-surface border border-white/[0.08]">
+                      <span className="text-primary">{section.icon}</span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-800">{config.label}</span>
+                    <span className="text-sm font-semibold text-text-primary">{section.label}</span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="pl-10 pr-2">
-                    <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-                      {sections[config.key]}
+                    <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                      {section.content}
                     </div>
                   </div>
                 </AccordionContent>

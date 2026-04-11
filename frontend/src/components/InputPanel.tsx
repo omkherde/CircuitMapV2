@@ -1,9 +1,9 @@
 import {
   FlaskConical,
   Stethoscope,
-  Play,
   Loader2,
-  Beaker
+  Beaker,
+  Zap
 } from 'lucide-react';
 import type { QueryType, DemoScenario, SessionPhase } from '../types';
 import { DISEASE_INDICATIONS } from '../types';
@@ -50,10 +50,10 @@ export function InputPanel({
     <Card className="overflow-hidden animate-fade-in">
       <CardHeader className="py-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-            <Beaker className="w-3.5 h-3.5 text-white" />
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary to-cyan-400 flex items-center justify-center">
+            <Beaker className="w-3.5 h-3.5 text-bg-base" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
             Input
           </h2>
         </div>
@@ -64,7 +64,7 @@ export function InputPanel({
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="drug-query">Drug Molecule</Label>
           <div className="relative">
-            <FlaskConical className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+            <FlaskConical className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none z-10" />
             <Input
               id="drug-query"
               type="text"
@@ -94,7 +94,7 @@ export function InputPanel({
             />
             <span className={cn(
               'text-sm font-medium transition-colors',
-              queryType === 'name' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
+              queryType === 'name' ? 'text-primary' : 'text-text-muted group-hover:text-text-primary'
             )}>
               Drug name
             </span>
@@ -111,7 +111,7 @@ export function InputPanel({
             />
             <span className={cn(
               'text-sm font-medium transition-colors',
-              queryType === 'smiles' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
+              queryType === 'smiles' ? 'text-primary' : 'text-text-muted group-hover:text-text-primary'
             )}>
               SMILES
             </span>
@@ -122,7 +122,7 @@ export function InputPanel({
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="indication">Disease Indication</Label>
           <div className="relative">
-            <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+            <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none z-10" />
             <Select
               value={indication}
               onValueChange={onIndicationChange}
@@ -148,8 +148,8 @@ export function InputPanel({
             onClick={onValidate}
             disabled={!isFormValid || isRunning}
             className={cn(
-              'w-full',
-              isRunning && 'animate-pulse-glow'
+              'w-full relative overflow-hidden',
+              isRunning && 'animate-action-potential'
             )}
           >
             {isRunning ? (
@@ -159,7 +159,7 @@ export function InputPanel({
               </>
             ) : (
               <>
-                <Play className="w-4 h-4" />
+                <Zap className="w-4 h-4" />
                 Validate Target
               </>
             )}

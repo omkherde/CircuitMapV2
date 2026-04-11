@@ -42,14 +42,14 @@ function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
   const getProgressColor = (level: ConfidenceLevel) => {
     switch (level) {
       case 'HIGH':
-        return 'from-emerald-500 to-teal-500';
+        return 'from-confidence-high to-emerald-400';
       case 'MODERATE':
-        return 'from-amber-500 to-orange-500';
+        return 'from-confidence-moderate to-amber-400';
       case 'LOW':
-        return 'from-red-500 to-rose-500';
+        return 'from-confidence-low to-rose-400';
       case 'PENDING':
       default:
-        return 'from-slate-200 to-slate-300';
+        return 'from-bg-surface to-bg-elevated';
     }
   };
 
@@ -76,8 +76,8 @@ function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ChevronRight className="w-3 h-3 text-slate-400" />
-          <span className="text-sm font-medium text-slate-700">{dimension.label}</span>
+          <ChevronRight className="w-3 h-3 text-text-muted" />
+          <span className="text-sm font-medium text-text-secondary">{dimension.label}</span>
         </div>
         <Badge variant={getBadgeVariant(dimension.level)}>
           {getIcon(dimension.level)}
@@ -95,7 +95,7 @@ function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
       </div>
 
       {dimension.rationale && (
-        <p className="text-xs text-slate-500 leading-relaxed ml-5 mt-1">
+        <p className="text-xs text-text-muted leading-relaxed ml-5 mt-1">
           {dimension.rationale}
         </p>
       )}
@@ -141,10 +141,10 @@ export function ConfidencePanel({ confidence }: ConfidencePanelProps) {
       <CardHeader className="py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-              <Shield className="w-3.5 h-3.5 text-white" />
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-confidence-moderate to-amber-400 flex items-center justify-center">
+              <Shield className="w-3.5 h-3.5 text-bg-base" />
             </div>
-            <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+            <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
               Confidence
             </h2>
           </div>
@@ -159,15 +159,15 @@ export function ConfidencePanel({ confidence }: ConfidencePanelProps) {
       <CardContent className="px-4 py-0">
         {!hasAnyUpdate ? (
           <div className="py-6 text-center">
-            <div className="w-10 h-10 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-2">
-              <Clock className="w-5 h-5 text-slate-300" />
+            <div className="w-10 h-10 mx-auto rounded-full bg-bg-surface flex items-center justify-center mb-2">
+              <Clock className="w-5 h-5 text-text-muted" />
             </div>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-text-muted">
               Awaiting confidence assessment...
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-white/[0.08]">
             {dimensions.map((dim, index) => (
               <ConfidenceRow key={dim.dimension} dimension={dim} index={index} />
             ))}

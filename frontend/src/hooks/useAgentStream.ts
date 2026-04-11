@@ -89,6 +89,10 @@ export function useAgentStream({
 
     // Handle connection errors
     eventSource.onerror = () => {
+      if (eventSource.readyState === EventSource.CLOSED) {
+        cleanup();
+        return;
+      }
       onError('Connection to server lost');
       cleanup();
     };

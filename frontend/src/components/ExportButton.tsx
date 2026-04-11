@@ -45,7 +45,7 @@ export function ExportButton({ pdfUrl, sessionId }: ExportButtonProps) {
         </Button>
 
         {isReady && (
-          <p className="text-xs text-center text-slate-500 mt-2">
+          <p className="text-xs text-center text-text-muted mt-2">
             Download your complete validation report
           </p>
         )}

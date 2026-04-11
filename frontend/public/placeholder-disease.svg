@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
   <defs>
-    <linearGradient id="atrophyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#fecaca"/>
-      <stop offset="50%" style="stop-color:#ef4444"/>
-      <stop offset="100%" style="stop-color:#7f1d1d"/>
+    <!-- Inferno colormap gradient: black -> purple -> red -> orange -> yellow -->
+    <linearGradient id="atrophyGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" style="stop-color:#000004"/>
+      <stop offset="20%" style="stop-color:#420a68"/>
+      <stop offset="40%" style="stop-color:#932667"/>
+      <stop offset="60%" style="stop-color:#dd513a"/>
+      <stop offset="80%" style="stop-color:#fca50a"/>
+      <stop offset="100%" style="stop-color:#fcffa4"/>
     </linearGradient>
     <filter id="glowRed">
       <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
@@ -14,7 +18,7 @@
     </filter>
     <!-- Atrophy pattern texture -->
     <pattern id="atrophyPattern" patternUnits="userSpaceOnUse" width="4" height="4">
-      <circle cx="2" cy="2" r="0.5" fill="#fca5a5" opacity="0.3"/>
+      <circle cx="2" cy="2" r="0.5" fill="#fca50a" opacity="0.3"/>
     </pattern>
   </defs>
 
@@ -40,26 +44,26 @@
   <path d="M215,175 Q220,190 215,200 L205,200 Q200,190 205,175Z"
         fill="#1e293b" stroke="#334155" stroke-width="1"/>
 
-  <!-- Hippocampus atrophy - 0.92 severity (most severe) -->
-  <ellipse cx="175" cy="125" rx="24" ry="14" fill="#dc2626" opacity="0.95" filter="url(#glowRed)"/>
+  <!-- Hippocampus atrophy - 0.92 severity (most severe - yellow/orange) -->
+  <ellipse cx="175" cy="125" rx="24" ry="14" fill="#fca50a" opacity="0.95" filter="url(#glowRed)"/>
   <ellipse cx="175" cy="125" rx="24" ry="14" fill="url(#atrophyPattern)"/>
-  <text x="175" y="128" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="7" font-weight="500">Hippocampus</text>
+  <text x="175" y="128" text-anchor="middle" fill="#000" font-family="system-ui" font-size="7" font-weight="500">Hippocampus</text>
 
-  <!-- Entorhinal cortex atrophy - 0.88 severity -->
-  <ellipse cx="200" cy="148" rx="18" ry="11" fill="#ef4444" opacity="0.9" filter="url(#glowRed)"/>
+  <!-- Entorhinal cortex atrophy - 0.88 severity (red-orange) -->
+  <ellipse cx="200" cy="148" rx="18" ry="11" fill="#dd513a" opacity="0.9" filter="url(#glowRed)"/>
   <text x="200" y="151" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="6">Entorhinal</text>
 
-  <!-- Temporal lobe atrophy - 0.76 severity -->
+  <!-- Temporal lobe atrophy - 0.76 severity (magenta/purple) -->
   <path d="M115,130 C135,138 160,148 180,148 C175,162 150,172 120,165 C95,158 100,140 115,130Z"
-        fill="#f87171" opacity="0.75"/>
+        fill="#932667" opacity="0.75"/>
   <text x="145" y="158" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="6">Temporal</text>
 
-  <!-- Mild parietal involvement -->
+  <!-- Mild parietal involvement (darker purple) -->
   <path d="M140,60 C160,55 185,60 195,75 C180,70 155,65 140,70 C135,68 135,62 140,60Z"
-        fill="#fca5a5" opacity="0.4"/>
+        fill="#420a68" opacity="0.4"/>
 
   <!-- Atrophy indicators (small circles showing degeneration) -->
-  <g fill="#fecaca" opacity="0.6">
+  <g fill="#fcffa4" opacity="0.6">
     <circle cx="165" cy="120" r="2"/>
     <circle cx="185" cy="130" r="1.5"/>
     <circle cx="170" cy="135" r="1.8"/>
@@ -71,7 +75,7 @@
   <!-- Title -->
   <text x="160" y="16" text-anchor="middle" fill="#94a3b8" font-family="system-ui" font-size="10" font-weight="600">Alzheimer's Atrophy Pattern</text>
 
-  <!-- Color bar -->
+  <!-- Color bar (inferno) -->
   <rect x="270" y="50" width="8" height="80" fill="url(#atrophyGradient)" rx="2"/>
   <text x="290" y="55" fill="#64748b" font-family="system-ui" font-size="7">Severe</text>
   <text x="290" y="130" fill="#64748b" font-family="system-ui" font-size="7">Mild</text>
@@ -80,7 +84,7 @@
   <text x="12" y="190" fill="#64748b" font-family="system-ui" font-size="7">Neurosynth Meta-analysis</text>
 
   <!-- Severity labels -->
-  <g fill="#fca5a5" font-family="system-ui" font-size="6">
+  <g fill="#fcffa4" font-family="system-ui" font-size="6">
     <text x="205" y="122">0.92</text>
     <text x="222" y="152">0.88</text>
     <text x="165" y="168">0.76</text>

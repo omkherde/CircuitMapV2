@@ -1,6 +1,24 @@
-import { clsx } from 'clsx';
+import {
+  FlaskConical,
+  Stethoscope,
+  Play,
+  Loader2,
+  Beaker
+} from 'lucide-react';
 import type { QueryType, DemoScenario, SessionPhase } from '../types';
 import { DISEASE_INDICATIONS } from '../types';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface InputPanelProps {
   drugQuery: string;
@@ -29,114 +47,134 @@ export function InputPanel({
   const isFormValid = drugQuery.trim() !== '' && indication !== '';
 
   return (
-    <div className="flex flex-col gap-4 p-4 bg-white rounded-lg shadow-sm">
-      <h2 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
-        Input
-      </h2>
+    <Card className="overflow-hidden animate-fade-in">
+      <CardHeader className="py-3">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+            <Beaker className="w-3.5 h-3.5 text-white" />
+          </div>
+          <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+            Input
+          </h2>
+        </div>
+      </CardHeader>
 
-      {/* Drug Query Input */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="drug-query" className="text-sm font-medium text-gray-600">
-          Drug Molecule
-        </label>
-        <input
-          id="drug-query"
-          type="text"
-          value={drugQuery}
-          onChange={(e) => onDrugQueryChange(e.target.value)}
-          disabled={isRunning}
-          placeholder={queryType === 'smiles' ? 'Enter SMILES...' : 'Enter drug name...'}
-          className={clsx(
-            'px-3 py-2 border border-gray-300 rounded-md',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-            'disabled:bg-gray-100 disabled:cursor-not-allowed',
-            queryType === 'smiles' && 'font-mono text-sm'
-          )}
-        />
-      </div>
+      <CardContent className="flex flex-col gap-4">
+        {/* Drug Query Input */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="drug-query">Drug Molecule</Label>
+          <div className="relative">
+            <FlaskConical className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+            <Input
+              id="drug-query"
+              type="text"
+              value={drugQuery}
+              onChange={(e) => onDrugQueryChange(e.target.value)}
+              disabled={isRunning}
+              placeholder={queryType === 'smiles' ? 'Enter SMILES string...' : 'Enter drug name...'}
+              className={cn(
+                'pl-10',
+                queryType === 'smiles' && 'font-mono text-sm'
+              )}
+            />
+          </div>
+        </div>
 
-      {/* Query Type Toggle */}
-      <div className="flex gap-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="query-type"
-            value="name"
-            checked={queryType === 'name'}
-            onChange={() => onQueryTypeChange('name')}
+        {/* Query Type Toggle */}
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2.5 cursor-pointer group">
+            <input
+              type="radio"
+              name="query-type"
+              value="name"
+              checked={queryType === 'name'}
+              onChange={() => onQueryTypeChange('name')}
+              disabled={isRunning}
+              className="radio-custom"
+            />
+            <span className={cn(
+              'text-sm font-medium transition-colors',
+              queryType === 'name' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
+            )}>
+              Drug name
+            </span>
+          </label>
+          <label className="flex items-center gap-2.5 cursor-pointer group">
+            <input
+              type="radio"
+              name="query-type"
+              value="smiles"
+              checked={queryType === 'smiles'}
+              onChange={() => onQueryTypeChange('smiles')}
+              disabled={isRunning}
+              className="radio-custom"
+            />
+            <span className={cn(
+              'text-sm font-medium transition-colors',
+              queryType === 'smiles' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
+            )}>
+              SMILES
+            </span>
+          </label>
+        </div>
+
+        {/* Indication Dropdown */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="indication">Disease Indication</Label>
+          <div className="relative">
+            <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+            <Select
+              value={indication}
+              onValueChange={onIndicationChange}
+              disabled={isRunning}
+            >
+              <SelectTrigger className="pl-10">
+                <SelectValue placeholder="Select indication..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DISEASE_INDICATIONS.map((disease) => (
+                  <SelectItem key={disease} value={disease}>
+                    {disease}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-2.5 mt-2">
+          <Button
+            onClick={onValidate}
+            disabled={!isFormValid || isRunning}
+            className={cn(
+              'w-full',
+              isRunning && 'animate-pulse-glow'
+            )}
+          >
+            {isRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Validating...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                Validate Target
+              </>
+            )}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => onLoadDemo('alzheimers')}
             disabled={isRunning}
-            className="text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-700">Drug name</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="query-type"
-            value="smiles"
-            checked={queryType === 'smiles'}
-            onChange={() => onQueryTypeChange('smiles')}
-            disabled={isRunning}
-            className="text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-700">SMILES</span>
-        </label>
-      </div>
-
-      {/* Indication Dropdown */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="indication" className="text-sm font-medium text-gray-600">
-          Disease Indication
-        </label>
-        <select
-          id="indication"
-          value={indication}
-          onChange={(e) => onIndicationChange(e.target.value)}
-          disabled={isRunning}
-          className={clsx(
-            'px-3 py-2 border border-gray-300 rounded-md',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-            'disabled:bg-gray-100 disabled:cursor-not-allowed',
-            !indication && 'text-gray-400'
-          )}
-        >
-          <option value="">Select indication...</option>
-          {DISEASE_INDICATIONS.map((disease) => (
-            <option key={disease} value={disease}>
-              {disease}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-col gap-2 mt-2">
-        <button
-          onClick={onValidate}
-          disabled={!isFormValid || isRunning}
-          className={clsx(
-            'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
-            isFormValid && !isRunning
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          )}
-        >
-          {isRunning ? 'Validating...' : 'Validate Target'}
-        </button>
-        <button
-          onClick={() => onLoadDemo('alzheimers')}
-          disabled={isRunning}
-          className={clsx(
-            'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-            'border border-gray-300 bg-white text-gray-700',
-            'hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
-            'disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed'
-          )}
-        >
-          Load Demo
-        </button>
-      </div>
-    </div>
+            className="w-full"
+          >
+            <Beaker className="w-4 h-4" />
+            Load Demo
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

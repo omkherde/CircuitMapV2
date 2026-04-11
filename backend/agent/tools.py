@@ -10,6 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 _executor = ThreadPoolExecutor(max_workers=4)
+MODEL_TOP_REGIONS = 5
+MODEL_TOP_ASSOCIATIONS = 5
+MODEL_TOP_OFF_TARGETS = 2
+MODEL_TOP_LITERATURE_HITS = 3
 
 
 async def execute_tool(
@@ -81,7 +85,8 @@ async def execute_tool(
                 "interpretation": result.get("interpretation", "")
             })
 
-        return json.dumps(result, default=str)
+        compact_result = _compact_result_for_model(tool_name, result)
+        return json.dumps(compact_result, default=str)
 
     except Exception as e:
         error_result = {"error": str(e), "tool": tool_name}
@@ -140,6 +145,107 @@ def _summarize_result(tool_name: str, result: dict) -> str:
         return str(result)[:120]
 
 
+def _compact_result_for_model(tool_name: str, result: dict[str, Any]) -> dict[str, Any]:
+    """
+    Shrink tool outputs before feeding them back into Claude.
+
+    The frontend still receives the full result via SSE, but the model only gets
+    the fields it needs for follow-up reasoning and report writing.
+    """
+    if not isinstance(result, dict):
+        return {"value": str(result)}
+
+    compact: dict[str, Any] = {}
+
+    if result.get("error"):
+        compact["error"] = result["error"]
+
+    if tool_name == "resolve_target":
+        for key in (
+            "query",
+            "query_type",
+            "primary_target",
+            "target_class",
+            "binding_affinity",
+            "affinity_type",
+            "confidence",
+            "data_source",
+            "drug_name",
+            "resolved_name",
+            "note",
+            "pubchem_cid",
+        ):
+            if key in result:
+                compact[key] = result[key]
+
+        compact["off_targets"] = [
+            {
+                "gene_name": item.get("gene_name"),
+                "binding_affinity": item.get("binding_affinity"),
+                "affinity_type": item.get("affinity_type"),
+            }
+            for item in result.get("off_targets", [])[:MODEL_TOP_OFF_TARGETS]
+        ]
+        return compact
+
+    if tool_name == "get_brain_expression":
+        for key in ("gene_name", "atlas", "map_id", "source"):
+            if key in result:
+                compact[key] = result[key]
+        compact["top_regions"] = _compact_regions(result.get("top_regions", []))
+        return compact
+
+    if tool_name == "get_cognitive_associations":
+        compact["cognitive_associations"] = [
+            {
+                "function": item.get("function"),
+                "score": item.get("score"),
+            }
+            for item in result.get("cognitive_associations", [])[:MODEL_TOP_ASSOCIATIONS]
+        ]
+        return compact
+
+    if tool_name == "get_disease_map":
+        for key in ("indication", "neurosynth_term", "n_studies", "map_id", "source"):
+            if key in result:
+                compact[key] = result[key]
+        compact["top_regions"] = _compact_regions(result.get("top_regions", []))
+        return compact
+
+    if tool_name == "compute_overlap":
+        for key in ("label", "r", "percentile", "interpretation", "n_regions"):
+            if key in result:
+                compact[key] = result[key]
+        return compact
+
+    if tool_name == "search_literature":
+        compact["query"] = result.get("query")
+        compact["total_results"] = result.get("total_results", len(result.get("results", [])))
+        compact["results"] = [
+            {
+                "title": item.get("title"),
+                "year": item.get("year"),
+                "journal": item.get("journal"),
+                "pmid": item.get("pmid"),
+            }
+            for item in result.get("results", [])[:MODEL_TOP_LITERATURE_HITS]
+        ]
+        return compact
+
+    return result
+
+
+def _compact_regions(regions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "region": region.get("region"),
+            "percentile": region.get("percentile"),
+            "value": region.get("value"),
+        }
+        for region in regions[:MODEL_TOP_REGIONS]
+    ]
+
+
 # ── Service wrappers ──────────────────────────────────────────────────────────
 
 def _resolve_target(inp: dict, session_id: str, eq) -> dict:
@@ -154,7 +260,7 @@ def _get_brain_expression(inp: dict, session_id: str, eq) -> dict:
 
 def _get_cognitive_associations(inp: dict, session_id: str, eq) -> dict:
     from services.neurosynth_service import get_cognitive_associations
-    return get_cognitive_associations(inp["regions"], inp.get("top_n", 8))
+    return get_cognitive_associations(inp["regions"], inp.get("top_n", 5))
 
 
 def _get_disease_map(inp: dict, session_id: str, eq) -> dict:
@@ -169,4 +275,4 @@ def _compute_overlap(inp: dict, session_id: str, eq) -> dict:
 
 def _search_literature(inp: dict, session_id: str, eq) -> dict:
     from services.rag_service import search_literature
-    return search_literature(inp["query"], inp.get("top_k", 5))
+    return search_literature(inp["query"], inp.get("top_k", 3))

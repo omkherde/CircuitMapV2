@@ -7,6 +7,9 @@ ordered by binding affinity (lowest nM = first).
 import os
 import requests
 
+TARGET_RESOLUTION_TIMEOUT_SECONDS = float(os.getenv("TARGET_RESOLUTION_TIMEOUT_SECONDS", "6"))
+CHEMBL_STATUS_URL = "https://www.ebi.ac.uk/chembl/api/data/status.json"
+PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 
 LOCAL_TARGET_FALLBACKS = {
     "chaetocin": {
@@ -109,8 +112,160 @@ def _resolve_local_fallback(query: str, query_type: str) -> dict | None:
         return None
 
     result = dict(LOCAL_TARGET_FALLBACKS[key])
+    result["query"] = query
+    result["query_type"] = query_type
     result["note"] = "Resolved from bundled offline fallback data."
     return result
+
+
+def _build_unresolved_result(
+    query: str,
+    query_type: str,
+    note: str,
+    *,
+    data_source: str = "Unavailable",
+    error: str | None = None,
+    resolved_name: str | None = None,
+    pubchem_cid: int | None = None,
+) -> dict:
+    result = {
+        "query": query,
+        "query_type": query_type,
+        "primary_target": None,
+        "protein_name": None,
+        "target_class": "Unknown",
+        "binding_affinity": None,
+        "affinity_type": None,
+        "chembl_id": None,
+        "data_source": data_source,
+        "off_targets": [],
+        "confidence": "unresolved",
+        "note": note,
+    }
+    if error:
+        result["error"] = error
+    if resolved_name:
+        result["drug_name"] = resolved_name
+        result["resolved_name"] = resolved_name
+    if pubchem_cid is not None:
+        result["pubchem_cid"] = pubchem_cid
+    return result
+
+
+def _short_error(exc: Exception | str) -> str:
+    text = str(exc).strip()
+    return text.splitlines()[0] if text else "unknown error"
+
+
+def _service_available(url: str) -> bool:
+    try:
+        response = requests.get(url, timeout=TARGET_RESOLUTION_TIMEOUT_SECONDS)
+        return response.ok
+    except requests.RequestException:
+        return False
+
+
+def _pubchem_query_segment(query: str, query_type: str) -> str:
+    encoded = requests.utils.quote(query, safe="")
+    return f"name/{encoded}" if query_type == "name" else f"smiles/{encoded}"
+
+
+def _lookup_pubchem_metadata(query: str, query_type: str) -> dict | None:
+    """
+    Retrieve basic PubChem metadata that can help canonicalize a name or SMILES.
+    """
+    query_segment = _pubchem_query_segment(query, query_type)
+    cid_url = f"{PUBCHEM_BASE_URL}/compound/{query_segment}/cids/JSON"
+
+    cid_response = requests.get(cid_url, timeout=TARGET_RESOLUTION_TIMEOUT_SECONDS)
+    if cid_response.status_code != 200:
+        return None
+
+    cids = cid_response.json().get("IdentifierList", {}).get("CID", [])
+    if not cids:
+        return None
+
+    cid = cids[0]
+    metadata = {"pubchem_cid": cid}
+
+    property_url = (
+        f"{PUBCHEM_BASE_URL}/compound/cid/{cid}/property/"
+        "Title,IUPACName,CanonicalSMILES,IsomericSMILES/JSON"
+    )
+    try:
+        property_response = requests.get(property_url, timeout=TARGET_RESOLUTION_TIMEOUT_SECONDS)
+        if property_response.status_code == 200:
+            props = property_response.json().get("PropertyTable", {}).get("Properties", [])
+            if props:
+                first = props[0]
+                metadata["title"] = first.get("Title")
+                metadata["iupac_name"] = first.get("IUPACName")
+                metadata["canonical_smiles"] = first.get("CanonicalSMILES")
+                metadata["isomeric_smiles"] = first.get("IsomericSMILES")
+    except requests.RequestException:
+        pass
+
+    synonyms_url = f"{PUBCHEM_BASE_URL}/compound/cid/{cid}/synonyms/JSON"
+    try:
+        synonyms_response = requests.get(synonyms_url, timeout=TARGET_RESOLUTION_TIMEOUT_SECONDS)
+        if synonyms_response.status_code == 200:
+            info = synonyms_response.json().get("InformationList", {}).get("Information", [])
+            if info:
+                metadata["synonyms"] = info[0].get("Synonym", [])
+    except requests.RequestException:
+        pass
+
+    return metadata
+
+
+def _extract_pubchem_candidate_names(metadata: dict) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    raw_names = [
+        metadata.get("title"),
+        metadata.get("iupac_name"),
+        *(metadata.get("synonyms") or []),
+    ]
+
+    for value in raw_names:
+        if not value:
+            continue
+        name = value.strip()
+        key = name.lower()
+        if key in seen:
+            continue
+        if len(name) < 2 or len(name) > 100:
+            continue
+        if name.upper().startswith("CID"):
+            continue
+        seen.add(key)
+        candidates.append(name)
+        if len(candidates) >= 12:
+            break
+
+    return candidates
+
+
+def _resolve_via_pubchem_aliases(query: str, query_type: str, new_client) -> tuple[dict | None, dict | None]:
+    """
+    Use PubChem to canonicalize a submitted name/SMILES, then retry ChEMBL by name.
+    """
+    metadata = _lookup_pubchem_metadata(query, query_type)
+    if not metadata:
+        return None, None
+
+    for candidate_name in _extract_pubchem_candidate_names(metadata):
+        result = _resolve_by_name(candidate_name, new_client)
+        if result.get("primary_target"):
+            result["note"] = (
+                f"Resolved via PubChem canonicalization using '{candidate_name}' before ChEMBL target lookup."
+            )
+            result["pubchem_cid"] = metadata.get("pubchem_cid")
+            result["resolved_name"] = candidate_name
+            return result, metadata
+
+    return None, metadata
 
 def resolve_target(query: str, query_type: str) -> dict:
     """
@@ -126,40 +281,86 @@ def resolve_target(query: str, query_type: str) -> dict:
         On failure: {"error": "...", "targets": []}
     """
     fallback = _resolve_local_fallback(query, query_type)
+    normalized_query = query.strip()
 
+    if fallback is not None:
+        return fallback
+
+    chembl_error = None
     try:
+        if not _service_available(CHEMBL_STATUS_URL):
+            raise RuntimeError("ChEMBL service unavailable")
+
         from chembl_webresource_client.new_client import new_client
 
         if query_type == "smiles":
-            result = _resolve_by_smiles(query, new_client)
+            result = _resolve_by_smiles(normalized_query, new_client)
         else:
-            result = _resolve_by_name(query, new_client)
+            result = _resolve_by_name(normalized_query, new_client)
 
-        if result.get("primary_target") or fallback is None:
+        if result.get("primary_target"):
+            result["query"] = normalized_query
+            result["query_type"] = query_type
             return result
 
-        fallback["note"] = (
-            "Using bundled offline fallback because live ChEMBL lookup returned "
-            f"no target: {result.get('error', 'unknown error')}"
-        )
-        return fallback
-    except Exception as e:
-        if fallback is not None:
-            fallback["note"] = (
-                "Using bundled offline fallback because live target resolution "
-                f"failed: {e}"
-            )
-            return fallback
+        alias_result, metadata = _resolve_via_pubchem_aliases(normalized_query, query_type, new_client)
+        if alias_result and alias_result.get("primary_target"):
+            alias_result["query"] = normalized_query
+            alias_result["query_type"] = query_type
+            return alias_result
 
-        # Fall back to PubChem
-        try:
-            return _resolve_via_pubchem(query, query_type)
-        except Exception as e2:
-            return {
-                "error": f"ChEMBL failed: {e}. PubChem failed: {e2}",
-                "targets": [],
-                "primary_target": None
-            }
+        resolution_note = result.get("error", "No target found from ChEMBL.")
+        if metadata:
+            return _build_unresolved_result(
+                normalized_query,
+                query_type,
+                note=(
+                    f"{resolution_note} PubChem recognized the molecule"
+                    + (f" as '{metadata.get('title')}'." if metadata.get("title") else ".")
+                ),
+                data_source="PubChem",
+                error=resolution_note,
+                resolved_name=metadata.get("title") or metadata.get("iupac_name"),
+                pubchem_cid=metadata.get("pubchem_cid"),
+            )
+        return _build_unresolved_result(
+            normalized_query,
+            query_type,
+            note=resolution_note,
+            data_source="ChEMBL",
+            error=resolution_note,
+        )
+    except Exception as e:
+        chembl_error = _short_error(e)
+
+    # Fall back to PubChem metadata if ChEMBL is unavailable or errored.
+    try:
+        pubchem_result = _resolve_via_pubchem(normalized_query, query_type)
+        note = pubchem_result.get("note", "PubChem recognized the molecule but target resolution is unavailable.")
+        if chembl_error:
+            note = f"ChEMBL lookup failed: {chembl_error}. {note}"
+        return _build_unresolved_result(
+            normalized_query,
+            query_type,
+            note=note,
+            data_source=pubchem_result.get("data_source", "PubChem"),
+            error=chembl_error or pubchem_result.get("error"),
+            resolved_name=pubchem_result.get("drug_name"),
+            pubchem_cid=pubchem_result.get("pubchem_cid"),
+        )
+    except Exception as e2:
+        combined_error = f"ChEMBL failed: {chembl_error or 'unknown error'}. PubChem failed: {_short_error(e2)}"
+        return _build_unresolved_result(
+            normalized_query,
+            query_type,
+            note=(
+                "The submitted molecule could not be resolved to a primary target in the current environment. "
+                "If you are running offline, reconnect to the internet and retry. "
+                "Otherwise try a generic drug name or an alternative SMILES representation."
+            ),
+            data_source="Unavailable",
+            error=combined_error,
+        )
 
 
 def _resolve_by_name(drug_name: str, new_client) -> dict:
@@ -355,21 +556,9 @@ def _infer_target_class(protein_name: str) -> str:
 
 def _resolve_via_pubchem(query: str, query_type: str) -> dict:
     """PubChem fallback lookup."""
-    if query_type == 'name':
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{requests.utils.quote(query)}/JSON"
-    else:
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{requests.utils.quote(query)}/JSON"
-
-    resp = requests.get(url, timeout=10)
-    if resp.status_code != 200:
-        raise Exception(f"PubChem returned status {resp.status_code}")
-
-    data = resp.json()
-    compounds = data.get('PC_Compounds', [])
-    if not compounds:
+    metadata = _lookup_pubchem_metadata(query, query_type)
+    if not metadata:
         raise Exception("No compounds found in PubChem")
-
-    cid = compounds[0].get('id', {}).get('id', {}).get('cid', 'Unknown')
 
     return {
         "primary_target": "Unknown",
@@ -381,8 +570,10 @@ def _resolve_via_pubchem(query: str, query_type: str) -> dict:
         "data_source": "PubChem",
         "off_targets": [],
         "confidence": "inferred",
-        "pubchem_cid": cid,
-        "note": "No binding data found. PubChem CID retrieved only."
+        "pubchem_cid": metadata.get("pubchem_cid"),
+        "drug_name": metadata.get("title") or metadata.get("iupac_name"),
+        "canonical_smiles": metadata.get("canonical_smiles"),
+        "note": "No target-level binding data found. PubChem recognized the submitted molecule."
     }
 
 

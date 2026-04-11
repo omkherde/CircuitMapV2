@@ -1,22 +1,20 @@
-"""
-agent/tools_schema.py — All 6 tool schemas for Claude tool_use (verbatim from PRD §6.3).
-"""
+"""Compact tool schemas to reduce repeated Anthropic input tokens."""
 
 TOOLS = [
     {
         "name": "resolve_target",
-        "description": "Given a SMILES string or drug name, query ChEMBL and PubChem to identify the primary CNS target gene/protein and retrieve binding affinity data. Returns up to 3 targets ordered by binding affinity.",
+        "description": "Resolve a drug name or SMILES string to up to 3 targets ranked by binding affinity.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "SMILES string or drug/compound name to look up"
+                    "description": "Drug name or SMILES"
                 },
                 "query_type": {
                     "type": "string",
                     "enum": ["smiles", "name"],
-                    "description": "Whether the query is a SMILES string or a drug name"
+                    "description": "Input type"
                 }
             },
             "required": ["query", "query_type"]
@@ -24,13 +22,13 @@ TOOLS = [
     },
     {
         "name": "get_brain_expression",
-        "description": "Query the Allen Human Brain Atlas via abagen to retrieve regional mRNA expression data for a specific gene across brain regions. Returns the top 10 regions by expression percentile and a map_id for use in compute_overlap.",
+        "description": "Return regional AHBA mRNA expression for a gene plus a map_id.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "gene_name": {
                     "type": "string",
-                    "description": "Official HGNC gene symbol in uppercase (e.g., SUV39H1, COMT, HDAC2, BDNF)"
+                    "description": "HGNC gene symbol"
                 }
             },
             "required": ["gene_name"]
@@ -38,19 +36,19 @@ TOOLS = [
     },
     {
         "name": "get_cognitive_associations",
-        "description": "Query Neurosynth reverse inference to return cognitive and behavioral functions most strongly associated with a list of brain regions. Use after get_brain_expression to understand what the high-expression regions do functionally.",
+        "description": "Return top cognitive associations for a list of brain regions.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "regions": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of brain region names from get_brain_expression results (e.g., ['hippocampus', 'entorhinal cortex', 'prefrontal cortex'])"
+                    "description": "Brain region names"
                 },
                 "top_n": {
                     "type": "integer",
-                    "description": "Number of top cognitive associations to return. Default: 8",
-                    "default": 8
+                    "description": "Max associations to return. Default: 5",
+                    "default": 5
                 }
             },
             "required": ["regions"]
@@ -58,13 +56,13 @@ TOOLS = [
     },
     {
         "name": "get_disease_map",
-        "description": "Query Neurosynth for a meta-analytic brain activation map associated with a disease or clinical condition. Returns the top implicated regions and a map_id for use in compute_overlap.",
+        "description": "Return a disease-associated brain map plus a map_id.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "indication": {
                     "type": "string",
-                    "description": "Disease or clinical condition in Neurosynth-compatible format (e.g., 'alzheimer', 'schizophrenia', 'depression', 'parkinson'). Use lowercase single words when possible."
+                    "description": "Disease or condition"
                 }
             },
             "required": ["indication"]
@@ -72,21 +70,21 @@ TOOLS = [
     },
     {
         "name": "compute_overlap",
-        "description": "Compute the spatial Pearson correlation between two brain maps using parcellated regional vectors. Returns correlation coefficient r and percentile rank vs. 1000 null permutations. Both maps must be from previous tool calls in this session.",
+        "description": "Compute spatial overlap between two prior map_ids.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "map1_id": {
                     "type": "string",
-                    "description": "The map_id returned by get_brain_expression (expression map)"
+                    "description": "First map_id"
                 },
                 "map2_id": {
                     "type": "string",
-                    "description": "The map_id returned by get_disease_map (disease map)"
+                    "description": "Second map_id"
                 },
                 "label": {
                     "type": "string",
-                    "description": "Human-readable label for this comparison (e.g., 'SUV39H1 expression vs Alzheimer disease anatomy')"
+                    "description": "Comparison label"
                 }
             },
             "required": ["map1_id", "map2_id", "label"]
@@ -94,18 +92,18 @@ TOOLS = [
     },
     {
         "name": "search_literature",
-        "description": "Query the pre-embedded PubMed RAG vector store to retrieve relevant abstracts about a target-disease relationship or specific scientific question. Use to resolve uncertainties, check safety signals, or gather mechanism evidence.",
+        "description": "Search the local literature store for relevant abstracts.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Scientific question or search query (e.g., 'SUV39H1 inhibition hippocampus memory Alzheimer', 'COMT Val158Met schizophrenia prefrontal')"
+                    "description": "Scientific search query"
                 },
                 "top_k": {
                     "type": "integer",
-                    "description": "Number of abstracts to retrieve. Default: 5. Max: 10.",
-                    "default": 5
+                    "description": "Max abstracts to retrieve. Default: 3.",
+                    "default": 3
                 }
             },
             "required": ["query"]

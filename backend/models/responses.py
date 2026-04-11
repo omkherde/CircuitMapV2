@@ -37,3 +37,46 @@ class DemoResponse(BaseModel):
     events: list
     expression_map_url: str
     disease_map_url: str
+
+
+class HeaderConfigResponse(BaseModel):
+    app_name: str
+    app_tagline: str
+    system_status_label: str
+
+
+class QueryTypeLabelsResponse(BaseModel):
+    name: str
+    smiles: str
+
+
+class InputPanelConfigResponse(BaseModel):
+    title: str
+    drug_query_label: str
+    drug_name_placeholder: str
+    smiles_placeholder: str
+    query_type_labels: QueryTypeLabelsResponse
+    indication_label: str
+    indication_placeholder: str
+    validate_button_label: str
+    validating_button_label: str
+    load_demo_button_label: str
+    indications: list[str]
+
+
+class ConfidenceDimensionLabelsResponse(BaseModel):
+    target_resolution: str
+    circuit_alignment: str
+    literature_support: str
+
+
+class ConfidencePanelConfigResponse(BaseModel):
+    title: str
+    empty_state: str
+    dimension_labels: ConfidenceDimensionLabelsResponse
+
+
+class AppConfigResponse(BaseModel):
+    header: HeaderConfigResponse
+    input_panel: InputPanelConfigResponse
+    confidence_panel: ConfidencePanelConfigResponse

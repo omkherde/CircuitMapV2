@@ -6,6 +6,49 @@
 
 ---
 
+## Debugging Continuation — 2026-04-11
+
+**Scope:** End-to-end backend/frontend debugging continuation from the failed AI-agent run.
+
+### Changes Made
+
+| # | File(s) | Change |
+|---|---------|--------|
+| 1 | `backend/services/ahba_service.py` | Replaced the broken `abagen.get_expression_data(atlas=None)` path with a direct donor-averaged AHBA microarray loader. Brain-expression calls now work from the cached donor files already in `backend/cache/ahba_data/`. |
+| 2 | `backend/services/neurosynth_service.py` | Added curated offline disease-map templates and PNG generation for supported indications when the Neurosynth dataset is missing. Disease-map requests no longer hard-fail in offline/dev mode. |
+| 3 | `backend/services/rag_service.py` | Removed the runtime dependency on downloading the Hugging Face embedding model at query time. Literature search now falls back to local lexical ranking over the cached Chroma documents. |
+| 4 | `backend/services/chembl_service.py` | Hardened live ChEMBL lookup error handling and added bundled fallback target profiles for common/demo molecules so network failures no longer crash target resolution. |
+| 5 | `backend/main.py` | Fixed SSE completion by emitting an actual `done` event before closing the stream. Also switched `/api/health` to real cache-readiness checks instead of fragile in-memory flags. |
+| 6 | `backend/services/pdf_service.py` | Updated PDF rendering to understand normalized report-section keys, so live/fallback reports now populate the PDF body instead of producing near-empty exports. |
+| 7 | `backend/agent/loop.py` | Fixed multiple agent-loop control-flow bugs: tool-limit wrap-up now actually gets a follow-up turn, skipped `tool_use` blocks receive synthetic `tool_result`s, `max_tokens` responses continue instead of aborting, and a deterministic fallback report/PDF path now runs if the model does not return the required final marker/headers. |
+| 8 | `backend/models/responses.py` | Added `neurosynth_loaded` to the health response shape to match the improved backend health payload. |
+| 9 | `frontend/src/types/index.ts`, `frontend/src/components/ReportPanel.tsx`, `frontend/src/utils/parseReport.ts`, `frontend/src/mocks/demoEvents.ts` | Aligned the frontend report schema and labels with the backend’s real report sections (`off_target_risk`, `preclinical_validation`, etc.) while keeping legacy/demo compatibility. |
+| 10 | `frontend/src/hooks/useAgentStream.ts` | Prevented normal SSE shutdown from being surfaced as a false “Connection to server lost” error when the stream closes cleanly. |
+| 11 | `frontend/package-lock.json`, `frontend/node_modules` | Installed the missing UI/runtime packages already declared in `package.json` so the current frontend source tree builds again. |
+| 12 | `frontend/src/components/ReportPanel.tsx` | Resolved the file’s stale unmerged git state after reconciling its section mapping with the fixed backend report contract. |
+
+### Verification
+
+- Backend Python compile check passed for all modified backend modules.
+- `get_expression_map('HIF1A')` succeeded using the local AHBA cache and generated `backend/sessions/smoke/expression.png`.
+- `get_disease_map('alzheimer')` succeeded via the offline fallback template and generated `backend/sessions/smoke/disease.png`.
+- `search_literature('Chaetocin Alzheimer', 3)` returned results from the local Chroma cache without needing Hugging Face downloads.
+- `compute_overlap(...)` succeeded on generated expression/disease maps.
+- PDF generation succeeded with normalized report-section keys.
+- `/api/health` returned healthy cache status through FastAPI `TestClient`.
+- SSE stream smoke test confirmed `event: done` is now emitted correctly.
+- Frontend `npm run build` passed after dependency sync.
+- Frontend `npm run lint` passed with 2 existing `react-refresh/only-export-components` warnings in `frontend/src/components/ui/badge.tsx` and `frontend/src/components/ui/button.tsx`.
+- Live external smoke checks passed for:
+  - ChEMBL target resolution for `Chaetocin`
+  - Anthropic credential/auth path with `.env` loaded
+  - Backend agent loop with `MAX_TOOL_CALLS=5`, which now emits `report_ready` and `pdf_ready` through the fallback-report path even under forced wrap-up conditions
+
+### Notes
+
+- The offline disease-map and target-resolution fallbacks are resilience features for dev/offline execution; when real external datasets/services are available, the live paths are still preferred.
+- The frontend lint warnings are non-blocking and were left unchanged because they are unrelated to the integration failures.
+
 ## Integration Pass — 2026-04-11
 
 **Scope:** Frontend ↔ Backend integration audit and fixes.

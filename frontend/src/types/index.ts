@@ -90,13 +90,17 @@ export interface ReportSections {
   executive_summary?: string;
   target_identification?: string;
   expression_analysis?: string;
-  disease_anatomy?: string;
   spatial_overlap?: string;
   circuit_interpretation?: string;
+  off_target_risk?: string;
   literature_context?: string;
   confidence_assessment?: string;
   limitations?: string;
   recommendations?: string;
+  preclinical_validation?: string;
+
+  // Legacy/demo-only keys kept for backwards compatibility.
+  disease_anatomy?: string;
   references?: string;
 }
 
@@ -173,14 +177,19 @@ export interface ValidateRequest {
 
 export interface ValidateResponse {
   session_id: string;
+  stream_url: string;
+  mode: 'live';
 }
 
 export interface DemoResponse {
   session_id: string;
+  mode: 'demo';
   events: TraceEvent[];
   drug_query: string;
   query_type: QueryType;
   indication: string;
+  expression_map_url?: string;
+  disease_map_url?: string;
 }
 
 // Disease indication options

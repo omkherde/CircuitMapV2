@@ -1,4 +1,6 @@
-import { clsx } from 'clsx';
+import { Download, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface ExportButtonProps {
   pdfUrl: string | null;
@@ -21,32 +23,33 @@ export function ExportButton({ pdfUrl, sessionId }: ExportButtonProps) {
   };
 
   return (
-    <button
-      onClick={handleExport}
-      disabled={!isReady}
-      className={clsx(
-        'flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all',
-        'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500',
-        isReady
-          ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
-          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-      )}
-    >
-      <svg
-        className="w-4 h-4"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-        />
-      </svg>
-      Export Report PDF
-    </button>
+    <Card className="overflow-hidden animate-fade-in">
+      <CardContent className="p-4">
+        <Button
+          onClick={handleExport}
+          disabled={!isReady}
+          variant={isReady ? "success" : "secondary"}
+          className="w-full h-12 text-sm font-semibold"
+        >
+          {isReady ? (
+            <>
+              <Download className="w-5 h-5" />
+              Export Report PDF
+            </>
+          ) : (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Preparing PDF...
+            </>
+          )}
+        </Button>
+
+        {isReady && (
+          <p className="text-xs text-center text-slate-500 mt-2">
+            Download your complete validation report
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   Header,
   InputPanel,
@@ -9,11 +9,12 @@ import {
   ReportPanel,
   ExportButton,
 } from './components';
-import { useAgentSession } from './hooks';
+import { useAgentSession, useAppConfig } from './hooks';
 import type { DemoScenario } from './types';
 import { AlertCircle, X } from 'lucide-react';
 
 function App() {
+  const { config, error: configError } = useAppConfig();
   const {
     state,
     startSession,
@@ -22,6 +23,13 @@ function App() {
     setQueryType,
     setIndication,
   } = useAgentSession();
+
+  useEffect(() => {
+    const title = [config?.header.app_name, config?.header.app_tagline]
+      .filter(Boolean)
+      .join(' - ');
+    document.title = title || document.title;
+  }, [config]);
 
   const handleValidate = useCallback(() => {
     if (state.drugQuery && state.indication) {
@@ -36,15 +44,18 @@ function App() {
     [loadDemo]
   );
 
+  const activeError = state.error || configError;
+
   return (
     <div className="min-h-screen bg-background">
-      <Header isDemo={state.isDemo} />
+      <Header isDemo={state.isDemo} config={config?.header ?? null} />
 
       <main className="p-4 md:p-6">
         <div className="grid grid-cols-[280px_1fr_340px] gap-5 max-w-[1600px] mx-auto">
           {/* Left Panel - Input */}
           <aside className="flex flex-col gap-4">
             <InputPanel
+              config={config?.input_panel ?? null}
               drugQuery={state.drugQuery}
               queryType={state.queryType}
               indication={state.indication}
@@ -56,7 +67,7 @@ function App() {
               onLoadDemo={handleLoadDemo}
             />
 
-            <ConfidencePanel confidence={state.confidence} />
+            <ConfidencePanel confidence={state.confidence} config={config?.confidence_panel ?? null} />
 
             {state.phase === 'complete' && !state.isDemo && (
               <ExportButton pdfUrl={state.pdfUrl} sessionId={state.sessionId} />
@@ -80,11 +91,11 @@ function App() {
         </div>
 
         {/* Error display */}
-        {state.error && (
+        {activeError && (
           <div className="fixed bottom-4 left-1/2 -translate-x-1/2 animate-fade-in-scale z-50">
             <div className="flex items-center gap-3 bg-red-600 text-white px-5 py-3 rounded-xl shadow-2xl shadow-red-600/30">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="text-sm font-medium">{state.error}</span>
+              <span className="text-sm font-medium">{activeError}</span>
               <button className="ml-2 p-1 hover:bg-red-500 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>

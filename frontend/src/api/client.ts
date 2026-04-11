@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ValidateRequest, ValidateResponse, DemoResponse, DemoScenario } from '../types';
+import type { ValidateRequest, ValidateResponse, DemoResponse, DemoScenario, AppConfig } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -19,6 +19,12 @@ export async function startValidation(request: ValidateRequest): Promise<Validat
 // Load demo data
 export async function loadDemoData(scenario: DemoScenario): Promise<DemoResponse> {
   const response = await api.get<DemoResponse>(`/api/demo/${scenario}`);
+  return response.data;
+}
+
+// Load live UI config
+export async function loadAppConfig(): Promise<AppConfig> {
+  const response = await api.get<AppConfig>('/api/config');
   return response.data;
 }
 

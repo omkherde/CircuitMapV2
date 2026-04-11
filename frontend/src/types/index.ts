@@ -192,20 +192,34 @@ export interface DemoResponse {
   disease_map_url?: string;
 }
 
-// Disease indication options
-export const DISEASE_INDICATIONS = [
-  "Alzheimer's disease",
-  "Parkinson's disease",
-  "Schizophrenia",
-  "Major depressive disorder",
-  "Bipolar disorder",
-  "PTSD",
-  "Epilepsy",
-  "ALS",
-  "Huntington's disease",
-  "Treatment-resistant depression",
-  "Anxiety disorders",
-  "Frontotemporal dementia",
-] as const;
+export interface HeaderConfig {
+  app_name: string;
+  app_tagline: string;
+  system_status_label: string;
+}
 
-export type DiseaseIndication = (typeof DISEASE_INDICATIONS)[number];
+export interface InputPanelConfig {
+  title: string;
+  drug_query_label: string;
+  drug_name_placeholder: string;
+  smiles_placeholder: string;
+  query_type_labels: Record<QueryType, string>;
+  indication_label: string;
+  indication_placeholder: string;
+  validate_button_label: string;
+  validating_button_label: string;
+  load_demo_button_label: string;
+  indications: string[];
+}
+
+export interface ConfidencePanelConfig {
+  title: string;
+  empty_state: string;
+  dimension_labels: Record<ConfidenceDimensionType, string>;
+}
+
+export interface AppConfig {
+  header: HeaderConfig;
+  input_panel: InputPanelConfig;
+  confidence_panel: ConfidencePanelConfig;
+}

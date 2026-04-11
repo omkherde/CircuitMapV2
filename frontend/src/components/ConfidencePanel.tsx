@@ -1,16 +1,18 @@
 import { Shield, ChevronRight, CheckCircle2, AlertCircle, XCircle, Clock } from 'lucide-react';
-import type { ConfidenceDimension, ConfidenceLevel } from '../types';
+import type { ConfidenceDimension, ConfidenceLevel, ConfidencePanelConfig } from '../types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ConfidenceRowProps {
   dimension: ConfidenceDimension;
   index: number;
+  label: string;
 }
 
-function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
+function ConfidenceRow({ dimension, index, label }: ConfidenceRowProps) {
   const getBadgeVariant = (level: ConfidenceLevel) => {
     switch (level) {
       case 'HIGH':
@@ -77,7 +79,7 @@ function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ChevronRight className="w-3 h-3 text-slate-400" />
-          <span className="text-sm font-medium text-slate-700">{dimension.label}</span>
+          <span className="text-sm font-medium text-slate-700">{label}</span>
         </div>
         <Badge variant={getBadgeVariant(dimension.level)}>
           {getIcon(dimension.level)}
@@ -105,9 +107,32 @@ function ConfidenceRow({ dimension, index }: ConfidenceRowProps) {
 
 interface ConfidencePanelProps {
   confidence: Record<string, ConfidenceDimension>;
+  config: ConfidencePanelConfig | null;
 }
 
-export function ConfidencePanel({ confidence }: ConfidencePanelProps) {
+export function ConfidencePanel({ confidence, config }: ConfidencePanelProps) {
+  if (!config) {
+    return (
+      <Card className="overflow-hidden animate-fade-in">
+        <CardHeader className="py-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+              <Shield className="w-3.5 h-3.5 text-white" />
+            </div>
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 py-0">
+          <div className="py-4 flex flex-col gap-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const dimensions = Object.values(confidence);
   const hasAnyUpdate = dimensions.some((d) => d.level !== 'PENDING');
 
@@ -145,7 +170,7 @@ export function ConfidencePanel({ confidence }: ConfidencePanelProps) {
               <Shield className="w-3.5 h-3.5 text-white" />
             </div>
             <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-              Confidence
+              {config.title}
             </h2>
           </div>
           {hasAnyUpdate && (
@@ -163,13 +188,18 @@ export function ConfidencePanel({ confidence }: ConfidencePanelProps) {
               <Clock className="w-5 h-5 text-slate-300" />
             </div>
             <p className="text-sm text-slate-400">
-              Awaiting confidence assessment...
+              {config.empty_state}
             </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
             {dimensions.map((dim, index) => (
-              <ConfidenceRow key={dim.dimension} dimension={dim} index={index} />
+              <ConfidenceRow
+                key={dim.dimension}
+                dimension={dim}
+                index={index}
+                label={config.dimension_labels[dim.dimension] || dim.label || dim.dimension.replace(/_/g, ' ')}
+              />
             ))}
           </div>
         )}

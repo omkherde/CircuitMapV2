@@ -5,13 +5,13 @@ import {
   Loader2,
   Beaker
 } from 'lucide-react';
-import type { QueryType, DemoScenario, SessionPhase } from '../types';
-import { DISEASE_INDICATIONS } from '../types';
+import type { QueryType, DemoScenario, SessionPhase, InputPanelConfig } from '../types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 
 interface InputPanelProps {
+  config: InputPanelConfig | null;
   drugQuery: string;
   queryType: QueryType;
   indication: string;
@@ -33,6 +34,7 @@ interface InputPanelProps {
 }
 
 export function InputPanel({
+  config,
   drugQuery,
   queryType,
   indication,
@@ -43,6 +45,39 @@ export function InputPanel({
   onValidate,
   onLoadDemo,
 }: InputPanelProps) {
+  if (!config) {
+    return (
+      <Card className="overflow-hidden animate-fade-in">
+        <CardHeader className="py-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+              <Beaker className="w-3.5 h-3.5 text-white" />
+            </div>
+            <Skeleton className="h-4 w-16" />
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="flex gap-4">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="flex flex-col gap-2.5 mt-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const isRunning = phase === 'running';
   const isFormValid = drugQuery.trim() !== '' && indication !== '';
 
@@ -54,7 +89,7 @@ export function InputPanel({
             <Beaker className="w-3.5 h-3.5 text-white" />
           </div>
           <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-            Input
+            {config.title}
           </h2>
         </div>
       </CardHeader>
@@ -62,7 +97,7 @@ export function InputPanel({
       <CardContent className="flex flex-col gap-4">
         {/* Drug Query Input */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="drug-query">Drug Molecule</Label>
+          <Label htmlFor="drug-query">{config.drug_query_label}</Label>
           <div className="relative">
             <FlaskConical className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
             <Input
@@ -71,7 +106,7 @@ export function InputPanel({
               value={drugQuery}
               onChange={(e) => onDrugQueryChange(e.target.value)}
               disabled={isRunning}
-              placeholder={queryType === 'smiles' ? 'Enter SMILES string...' : 'Enter drug name...'}
+              placeholder={queryType === 'smiles' ? config.smiles_placeholder : config.drug_name_placeholder}
               className={cn(
                 'pl-10',
                 queryType === 'smiles' && 'font-mono text-sm'
@@ -96,7 +131,7 @@ export function InputPanel({
               'text-sm font-medium transition-colors',
               queryType === 'name' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
             )}>
-              Drug name
+              {config.query_type_labels.name}
             </span>
           </label>
           <label className="flex items-center gap-2.5 cursor-pointer group">
@@ -113,14 +148,14 @@ export function InputPanel({
               'text-sm font-medium transition-colors',
               queryType === 'smiles' ? 'text-indigo-600' : 'text-slate-600 group-hover:text-slate-800'
             )}>
-              SMILES
+              {config.query_type_labels.smiles}
             </span>
           </label>
         </div>
 
         {/* Indication Dropdown */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="indication">Disease Indication</Label>
+          <Label htmlFor="indication">{config.indication_label}</Label>
           <div className="relative">
             <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
             <Select
@@ -129,10 +164,10 @@ export function InputPanel({
               disabled={isRunning}
             >
               <SelectTrigger className="pl-10">
-                <SelectValue placeholder="Select indication..." />
+                <SelectValue placeholder={config.indication_placeholder} />
               </SelectTrigger>
               <SelectContent>
-                {DISEASE_INDICATIONS.map((disease) => (
+                {config.indications.map((disease) => (
                   <SelectItem key={disease} value={disease}>
                     {disease}
                   </SelectItem>
@@ -155,12 +190,12 @@ export function InputPanel({
             {isRunning ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Validating...
+                {config.validating_button_label}
               </>
             ) : (
               <>
                 <Play className="w-4 h-4" />
-                Validate Target
+                {config.validate_button_label}
               </>
             )}
           </Button>
@@ -171,7 +206,7 @@ export function InputPanel({
             className="w-full"
           >
             <Beaker className="w-4 h-4" />
-            Load Demo
+            {config.load_demo_button_label}
           </Button>
         </div>
       </CardContent>

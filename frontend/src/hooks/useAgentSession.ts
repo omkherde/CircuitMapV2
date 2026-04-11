@@ -16,43 +16,47 @@ import { startValidation, loadDemoData } from '../api/client';
 import { useAgentStream } from './useAgentStream';
 import { demoScenarios } from '../mocks/demoEvents';
 
-const initialConfidence: Record<ConfidenceDimensionType, ConfidenceDimension> = {
-  target_resolution: {
-    dimension: 'target_resolution',
-    label: 'Target Resolution',
-    level: 'PENDING',
-    rationale: '',
-  },
-  circuit_alignment: {
-    dimension: 'circuit_alignment',
-    label: 'Circuit Alignment',
-    level: 'PENDING',
-    rationale: '',
-  },
-  literature_support: {
-    dimension: 'literature_support',
-    label: 'Literature Support',
-    level: 'PENDING',
-    rationale: '',
-  },
-};
+function buildInitialConfidence(): Record<ConfidenceDimensionType, ConfidenceDimension> {
+  return {
+    target_resolution: {
+      dimension: 'target_resolution',
+      label: '',
+      level: 'PENDING',
+      rationale: '',
+    },
+    circuit_alignment: {
+      dimension: 'circuit_alignment',
+      label: '',
+      level: 'PENDING',
+      rationale: '',
+    },
+    literature_support: {
+      dimension: 'literature_support',
+      label: '',
+      level: 'PENDING',
+      rationale: '',
+    },
+  };
+}
 
-const initialState: SessionState = {
-  sessionId: null,
-  phase: 'idle',
-  isDemo: false,
-  drugQuery: '',
-  queryType: 'name',
-  indication: '',
-  traceEvents: [],
-  expressionMap: null,
-  diseaseMap: null,
-  overlapScore: null,
-  confidence: { ...initialConfidence },
-  reportSections: null,
-  pdfUrl: null,
-  error: null,
-};
+function buildInitialState(): SessionState {
+  return {
+    sessionId: null,
+    phase: 'idle',
+    isDemo: false,
+    drugQuery: '',
+    queryType: 'name',
+    indication: '',
+    traceEvents: [],
+    expressionMap: null,
+    diseaseMap: null,
+    overlapScore: null,
+    confidence: buildInitialConfidence(),
+    reportSections: null,
+    pdfUrl: null,
+    error: null,
+  };
+}
 
 // Demo scenario metadata — must match backend scripts/precompute_demo.py
 const demoMetadata: Record<DemoScenario, { drugQuery: string; queryType: QueryType; indication: string }> = {
@@ -74,7 +78,7 @@ const demoMetadata: Record<DemoScenario, { drugQuery: string; queryType: QueryTy
 };
 
 export function useAgentSession() {
-  const [state, setState] = useState<SessionState>(initialState);
+  const [state, setState] = useState<SessionState>(() => buildInitialState());
   const demoTimeoutRef = useRef<number | null>(null);
   const demoEventsRef = useRef<TraceEvent[]>([]);
   const demoIndexRef = useRef<number>(0);
@@ -195,7 +199,7 @@ export function useAgentSession() {
     async (drugQuery: string, queryType: QueryType, indication: string) => {
       // Reset state
       setState({
-        ...initialState,
+        ...buildInitialState(),
         drugQuery,
         queryType,
         indication,
@@ -231,7 +235,7 @@ export function useAgentSession() {
       const metadata = demoMetadata[scenario];
 
       setState({
-        ...initialState,
+        ...buildInitialState(),
         phase: 'running',
         isDemo: true,
         drugQuery: metadata.drugQuery,
@@ -278,7 +282,7 @@ export function useAgentSession() {
     if (demoTimeoutRef.current) {
       clearTimeout(demoTimeoutRef.current);
     }
-    setState(initialState);
+    setState(buildInitialState());
   }, []);
 
   // Update form fields

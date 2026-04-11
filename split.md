@@ -1,172 +1,292 @@
-# CircuitMap — Two-Person Work Split
+# CircuitMap - Two Developer Work Split
 
-**Goal:** Divide the project so both developers can work in parallel with minimal merge conflicts.
+## Overview
+This document outlines the work distribution between two developers for the CircuitMap CNS drug target validation agent.
 
 ---
 
-## Person 1: Backend Engineer (Python)
+## Developer A: Backend & Agent Core
 
-**Focus:** FastAPI server, Claude agent loop, scientific data services
+**Directory Ownership:** `backend/` (all files)
 
-### Responsibilities
+### Phase 0: Environment Setup (2 hours)
+- [ ] Create project directory structure
+- [ ] Create `requirements.txt` with pinned versions
+- [ ] Create `.env.example` with all environment variables
+- [ ] Verify Python 3.11 environment and imports
 
-#### Core Agent System (`backend/agent/`)
-- `loop.py` — Agentic loop implementation with Claude tool_use streaming
-- `tools.py` — Tool execution dispatch and result formatting
-- `tools_schema.py` — 6 tool JSON schemas (resolve_target, get_brain_expression, get_cognitive_associations, get_disease_map, compute_overlap, search_literature)
-- `prompts.py` — System prompt from PRD §6.2
+### Phase 1: Pre-Event Scripts
+- [ ] `scripts/preload_ahba.py` - Download AHBA data (~500MB)
+- [ ] `scripts/preload_neurosynth.py` - Download Neurosynth database
+- [ ] `scripts/build_rag_store.py` - Build ChromaDB with PubMed abstracts
+- [ ] `scripts/precompute_demo.py` - Generate all 3 demo scenarios
 
-#### Scientific Services (`backend/services/`)
-- `chembl_service.py` — ChEMBL + PubChem drug/target resolution
-- `ahba_service.py` — Allen Human Brain Atlas queries via abagen + Nilearn visualization
-- `neurosynth_service.py` — Neurosynth meta-analytic maps + cognitive decoding
-- `correlation_service.py` — Spatial Pearson correlation + null permutation
-- `rag_service.py` — ChromaDB vector store for PubMed abstracts
-- `pdf_service.py` — ReportLab PDF generation
+### Phase 2: Services Layer
+Build in order with `if __name__ == "__main__"` test blocks:
 
-#### API Layer (`backend/`)
-- `main.py` — FastAPI routes, CORS, session management
-- `models/requests.py` — Pydantic input models
-- `models/responses.py` — Pydantic SSE event models
+1. [ ] **`services/chembl_service.py`**
+   - `resolve_target(query, query_type)` function
+   - ChEMBL + PubChem fallback lookup
 
-#### Pre-Event Scripts (`backend/scripts/`)
-- `preload_ahba.py` — Download AHBA dataset (~500MB)
-- `preload_neurosynth.py` — Download Neurosynth database
-- `build_rag_store.py` — Build ChromaDB with PubMed abstracts
-- `precompute_demo.py` — Cache 3 demo scenarios
+2. [ ] **`services/ahba_service.py`**
+   - `get_expression_map(gene_name, session_id)` function
+   - Set `matplotlib.use('Agg')` FIRST
+   - Generate regional bar chart PNG
 
-### Key Deliverables
-1. Working `/api/validate` endpoint that starts agent session
-2. Working `/api/stream/{id}` SSE endpoint emitting all event types
-3. All 6 tools returning real data from scientific databases
-4. PDF generation at `/api/report/{id}/download`
-5. Demo mode with pre-computed scenarios
+3. [ ] **`services/neurosynth_service.py`**
+   - `get_disease_map(indication, session_id)` function
+   - `get_cognitive_associations(regions, top_n)` function
 
-### Dependencies to Install
+4. [ ] **`services/correlation_service.py`**
+   - `store_parcellated_map(map_id, values)` function
+   - `compute_overlap(map1_id, map2_id, label)` function
+   - 1000 permutation null distribution (seed=42)
+
+5. [ ] **`services/rag_service.py`**
+   - `search_literature(query, top_k)` function
+   - ChromaDB PersistentClient singleton
+
+6. [ ] **`services/pdf_service.py`**
+   - `generate_pdf(session_id, report_sections, maps, target, indication)` function
+   - ReportLab A4 format with all 11 report sections
+
+### Phase 3: Agent Core
+- [ ] **`agent/prompts.py`** - System prompt from PRD §6.2
+- [ ] **`agent/tools_schema.py`** - All 6 tool schemas from PRD §6.3
+- [ ] **`agent/tools.py`** - Bridge between Claude tool calls and services
+- [ ] **`agent/loop.py`** - Main agentic loop with streaming
+
+### Phase 4: FastAPI Application
+- [ ] **`models/requests.py`** - `ValidateRequest`, `QueryType`, `DemoScenario`
+- [ ] **`models/responses.py`** - SSE event Pydantic models
+- [ ] **`main.py`** - FastAPI app with all endpoints:
+  - `POST /api/validate`
+  - `GET /api/stream/{session_id}`
+  - `GET /api/demo/{scenario}`
+  - `GET /api/maps/{session_id}/{map_type}.png`
+  - `GET /api/report/{session_id}/download`
+  - `GET /api/health`
+
+### Files Owned
+```
+backend/
+├── main.py
+├── requirements.txt
+├── .env.example
+├── agent/
+│   ├── __init__.py
+│   ├── loop.py
+│   ├── tools.py
+│   ├── tools_schema.py
+│   └── prompts.py
+├── services/
+│   ├── __init__.py
+│   ├── chembl_service.py
+│   ├── ahba_service.py
+│   ├── neurosynth_service.py
+│   ├── correlation_service.py
+│   ├── rag_service.py
+│   └── pdf_service.py
+├── models/
+│   ├── __init__.py
+│   ├── requests.py
+│   └── responses.py
+├── scripts/
+│   ├── preload_ahba.py
+│   ├── preload_neurosynth.py
+│   ├── build_rag_store.py
+│   └── precompute_demo.py
+├── cache/
+└── sessions/
+```
+
+### Testing Commands
 ```bash
-pip install anthropic fastapi uvicorn sse-starlette pydantic
-pip install numpy pandas scipy nibabel nilearn abagen matplotlib
-pip install chembl_webresource_client requests neurosynth
-pip install chromadb sentence-transformers biopython reportlab pillow
+python -c "from services.chembl_service import resolve_target; print(resolve_target('Donepezil', 'name'))"
+python -c "from services.ahba_service import get_expression_map; print(get_expression_map('COMT','test'))"
+python -c "from services.neurosynth_service import get_disease_map; print(get_disease_map('alzheimer','test'))"
+python -c "from services.rag_service import search_literature; print(search_literature('SUV39H1 Alzheimer'))"
+curl http://localhost:8000/api/health
 ```
 
 ---
 
-## Person 2: Frontend Engineer (React/TypeScript)
+## Developer B: Frontend & Integration
 
-**Focus:** React SPA, real-time UI, SSE event handling, visual polish
+**Directory Ownership:** `frontend/` (all files)
 
-### Responsibilities
+### Phase 0: Frontend Scaffold (2 hours)
+- [ ] Initialize Vite + React + TypeScript project
+- [ ] Install dependencies: axios, @tanstack/react-query, clsx, tailwind-merge
+- [ ] Configure Tailwind CSS with custom colors for trace events
+- [ ] Configure Vite proxy for `/api` to `localhost:8000`
+- [ ] Create `.env` with `VITE_API_BASE_URL`
 
-#### Core Components (`frontend/src/components/`)
-- `Header.tsx` — CircuitMap wordmark + demo mode badge
-- `InputPanel.tsx` — Drug input form (name/SMILES toggle, indication dropdown, validate button)
-- `ReasoningTrace.tsx` — Streaming trace panel with auto-scroll
-- `TraceEntry.tsx` — Single trace line with type-based styling (thought/tool_call/tool_result/confidence)
-- `BrainMaps.tsx` — Side-by-side expression + disease map images
-- `OverlapScore.tsx` — r value, percentile bar, color-coded badge
-- `ConfidencePanel.tsx` — Three-row confidence display (target/circuit/literature)
-- `ReportPanel.tsx` — Rendered report sections with markdown support
-- `ExportButton.tsx` — PDF download trigger
+### Phase 1: Types & API Client
+- [ ] **`src/types/index.ts`** - All TypeScript interfaces:
+  - `TraceEvent`, `TraceEventType`
+  - `ConfidenceLevel`, `ConfidenceDimension`
+  - `ReportSections`, `SessionState`
+  - `QueryType`, `DemoScenario`
 
-#### Hooks (`frontend/src/hooks/`)
-- `useAgentSession.ts` — POST /api/validate, manage session state
-- `useAgentStream.ts` — SSE connection, parse events, update React state
+- [ ] **`src/api/client.ts`** - Axios instance with base URL
 
-#### Types & Utils (`frontend/src/`)
-- `types/index.ts` — All TypeScript interfaces (TraceEvent, ReportSections, SessionState, etc.)
-- `api/client.ts` — Axios instance with base URL config
-- `utils/parseReport.ts` — Parse agent report text into section objects
+### Phase 2: Core Hooks
+- [ ] **`src/hooks/useAgentSession.ts`**
+  - `startSession(drug_query, query_type, indication)`
+  - `loadDemo(scenario)`
 
-#### Styling & Config
-- `tailwind.config.ts` — Custom colors for trace types, fonts
-- `App.tsx` — Three-panel layout (280px | flex | 340px)
-- CSS animations for fade-in effects on trace entries and brain maps
+- [ ] **`src/hooks/useAgentStream.ts`**
+  - Connect to SSE endpoint
+  - Parse events with named event listeners
+  - Handle all 9 event types
+  - Cleanup on unmount
 
-### Key Deliverables
-1. Three-panel layout matching PRD §8.1 wireframe
-2. Real-time trace panel with color-coded event types
-3. SSE integration that updates UI as events stream in
-4. Brain map placeholders that swap to images when ready
-5. Animated overlap score bar
-6. Report panel that renders all 11 sections
-7. Working PDF download button
-8. Demo mode UI indicator
+### Phase 3: UI Components
+Build in order:
 
-### Dependencies to Install
-```bash
-npm install react react-dom axios @tanstack/react-query clsx tailwind-merge
-npm install -D typescript vite @vitejs/plugin-react tailwindcss autoprefixer postcss
+1. [ ] **`src/components/Header.tsx`**
+   - "CircuitMap" wordmark (20px, weight 600)
+   - Demo mode badge (amber, top-right)
+
+2. [ ] **`src/components/InputPanel.tsx`**
+   - Drug molecule text input (monospace for SMILES)
+   - Radio toggle: "Drug name" | "SMILES"
+   - Disease indication dropdown (12 options)
+   - "Validate Target" primary button
+   - "Load Demo" secondary button
+
+3. [ ] **`src/components/TraceEntry.tsx`**
+   - Single trace line with type-based styling
+   - Fade-in animation (150ms)
+
+4. [ ] **`src/components/ReasoningTrace.tsx`**
+   - Container for trace entries (320px height, scroll)
+   - Auto-scroll to bottom
+   - Pulsing dot indicator while thinking
+
+5. [ ] **`src/components/BrainMaps.tsx`**
+   - Two panels side by side
+   - Gray placeholder before images load
+   - Smooth fade-in on load (300ms)
+
+6. [ ] **`src/components/OverlapScore.tsx`**
+   - r value display
+   - Percentile badge with color coding
+   - Animated bar fill
+
+7. [ ] **`src/components/ConfidencePanel.tsx`**
+   - Three rows with badges
+   - Collapsed initially, expands on first update
+
+8. [ ] **`src/components/ReportPanel.tsx`**
+   - Render all 11 report sections
+   - Scrollable container
+
+9. [ ] **`src/components/ExportButton.tsx`**
+   - "Export Report PDF" button
+   - Triggers download
+
+### Phase 4: App Integration
+- [ ] **`src/utils/parseReport.ts`** - Parse agent report into 11 sections
+- [ ] **`src/App.tsx`** - Three-panel layout, wire all components
+- [ ] Demo mode playback at 800ms intervals
+
+### Files Owned
+```
+frontend/
+├── index.html
+├── package.json
+├── vite.config.ts
+├── tailwind.config.ts
+├── tsconfig.json
+├── .env
+├── public/
+│   └── logo.svg
+└── src/
+    ├── main.tsx
+    ├── App.tsx
+    ├── index.css
+    ├── components/
+    │   ├── Header.tsx
+    │   ├── InputPanel.tsx
+    │   ├── ReasoningTrace.tsx
+    │   ├── TraceEntry.tsx
+    │   ├── BrainMaps.tsx
+    │   ├── OverlapScore.tsx
+    │   ├── ConfidencePanel.tsx
+    │   ├── ReportPanel.tsx
+    │   └── ExportButton.tsx
+    ├── hooks/
+    │   ├── useAgentSession.ts
+    │   └── useAgentStream.ts
+    ├── types/
+    │   └── index.ts
+    ├── api/
+    │   └── client.ts
+    └── utils/
+        └── parseReport.ts
 ```
 
----
-
-## Shared Interfaces (Contract Between Frontend & Backend)
-
-Both developers must agree on these SSE event formats before coding:
-
-```typescript
-// Event types emitted by backend, consumed by frontend
-type TraceEventType =
-  | 'agent_thought'      // { content: string }
-  | 'tool_call'          // { tool: string, input: object }
-  | 'tool_result'        // { tool: string, summary: string }
-  | 'brain_map'          // { map_type: 'expression'|'disease', image_url: string }
-  | 'overlap_score'      // { r: number, percentile: number, label: string }
-  | 'confidence_update'  // { dimension: string, level: string, rationale: string }
-  | 'report_ready'       // { report_sections: object }
-  | 'pdf_ready'          // { pdf_url: string, filename: string }
-  | 'error'              // { message: string, recoverable: boolean }
-```
+### Testing
+- Use mock data until backend is ready
+- Test SSE with browser DevTools Network tab
+- Verify auto-scroll behavior
+- Test demo mode playback timing
 
 ---
 
-## Parallel Development Strategy
+## Shared Interface Contract
 
-### Day 1: Foundation
-- **Person 1:** Set up FastAPI skeleton, implement `resolve_target` and `get_brain_expression` tools
-- **Person 2:** Scaffold React app, build InputPanel and ReasoningTrace components
+### API Endpoints
 
-### Day 2: Core Features
-- **Person 1:** Complete remaining 4 tools, implement agentic loop with streaming
-- **Person 2:** Implement SSE hook, BrainMaps component, OverlapScore visualization
+| Endpoint | Method | Request | Response |
+|----------|--------|---------|----------|
+| `/api/validate` | POST | `{ drug_query, query_type, indication }` | `{ session_id, stream_url, mode }` |
+| `/api/stream/{session_id}` | GET | - | SSE stream |
+| `/api/demo/{scenario}` | GET | - | Pre-computed demo data |
+| `/api/maps/{session_id}/{map_type}.png` | GET | - | PNG image |
+| `/api/report/{session_id}/download` | GET | - | PDF file |
+| `/api/health` | GET | - | `{ status, ahba_loaded, chroma_loaded }` |
 
-### Day 3: Integration & Polish
-- **Person 1:** PDF generation, demo mode caching, error handling
-- **Person 2:** ReportPanel, ConfidencePanel, PDF download, UI polish
+### SSE Event Types
 
-### Day 4: Demo Prep
-- **Both:** End-to-end testing, pre-compute demo scenarios, rehearse presentation
-
----
-
-## Communication Checkpoints
-
-1. **After InputPanel + `/api/validate` done:** Test that form submission returns session_id
-2. **After SSE streaming works:** Test that frontend receives agent_thought events
-3. **After brain maps generate:** Test that image URLs load in BrainMaps component
-4. **After report generation:** Test full end-to-end flow with PDF download
-
----
-
-## Files That Should NOT Be Edited Simultaneously
-
-To avoid merge conflicts:
-- `backend/main.py` — Person 1 owns this
-- `frontend/src/App.tsx` — Person 2 owns this
-- `frontend/src/types/index.ts` — Agree on types early, then Person 2 owns
+| Event | Data Fields |
+|-------|-------------|
+| `agent_thought` | `content`, `timestamp` |
+| `tool_call` | `tool`, `input`, `timestamp` |
+| `tool_result` | `tool`, `summary`, `result?`, `timestamp` |
+| `brain_map` | `map_type`, `map_id`, `image_url`, `top_regions`, `timestamp` |
+| `overlap_score` | `r`, `percentile`, `label`, `interpretation`, `timestamp` |
+| `confidence_update` | `dimension`, `level`, `rationale`, `timestamp` |
+| `report_ready` | `report_sections`, `timestamp` |
+| `pdf_ready` | `pdf_url`, `filename`, `timestamp` |
+| `error` | `message`, `recoverable`, `timestamp` |
 
 ---
 
-## Quick Reference: Who Owns What
+## Sync Schedule
 
-| Area | Owner |
-|------|-------|
-| Python backend | Person 1 |
-| Claude agent integration | Person 1 |
-| Scientific libraries (abagen, nilearn, neurosynth) | Person 1 |
-| React frontend | Person 2 |
-| SSE event handling | Person 2 |
-| UI/UX and styling | Person 2 |
-| API contract (SSE events) | Both — agree first |
-| Demo scenario content | Both — test together |
+### Day 1 End-of-Day
+- **Dev A**: Backend health endpoint working, chembl + ahba services tested
+- **Dev B**: Frontend scaffold done, types defined, input form working with mock
+- **Integration test**: Frontend can hit `/api/health`
+
+### Day 2 Morning
+- **Dev A**: All services complete, basic SSE streaming working
+- **Dev B**: All components built, SSE hook ready
+- **Integration test**: Frontend connects to SSE and displays events
+
+### Day 2 Afternoon
+- **Dev A**: Full agent loop working, demo mode cached
+- **Dev B**: Full UI complete, demo mode playback working
+- **Integration test**: Full end-to-end demo scenario
+
+---
+
+## Rules
+
+1. **Never cross directory boundaries** - Dev A stays in `backend/`, Dev B stays in `frontend/`
+2. **Don't modify the interface contract** without syncing
+3. **Use feature branches**: `dev-a/backend`, `dev-b/frontend`
+4. **Merge to main only after sync**

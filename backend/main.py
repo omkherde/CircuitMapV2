@@ -27,7 +27,7 @@ from sse_starlette.sse import EventSourceResponse
 import uvicorn
 
 from models.requests import ValidateRequest, DemoScenario
-from models.responses import ValidateResponse, HealthResponse
+from models.responses import ValidateResponse, HealthResponse, AppConfigResponse
 
 app = FastAPI(title="CircuitMap API", version="1.0.0")
 
@@ -53,7 +53,56 @@ SESSIONS_DIR = os.getenv("SESSIONS_DIR", "./sessions")
 DEMO_CACHE_DIR = os.getenv("DEMO_CACHE_DIR", "./cache/demo")
 
 
+def _env_text(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
+def _env_list(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    return [item.strip() for item in raw.split("|") if item.strip()]
+
+
+def _get_live_app_config() -> dict:
+    return {
+        "header": {
+            "app_name": _env_text("APP_DISPLAY_NAME"),
+            "app_tagline": _env_text("APP_TAGLINE"),
+            "system_status_label": _env_text("SYSTEM_STATUS_LABEL"),
+        },
+        "input_panel": {
+            "title": _env_text("INPUT_PANEL_TITLE"),
+            "drug_query_label": _env_text("DRUG_QUERY_LABEL"),
+            "drug_name_placeholder": _env_text("DRUG_NAME_PLACEHOLDER"),
+            "smiles_placeholder": _env_text("SMILES_PLACEHOLDER"),
+            "query_type_labels": {
+                "name": _env_text("QUERY_TYPE_NAME_LABEL"),
+                "smiles": _env_text("QUERY_TYPE_SMILES_LABEL"),
+            },
+            "indication_label": _env_text("INDICATION_LABEL"),
+            "indication_placeholder": _env_text("INDICATION_PLACEHOLDER"),
+            "validate_button_label": _env_text("VALIDATE_BUTTON_LABEL"),
+            "validating_button_label": _env_text("VALIDATING_BUTTON_LABEL"),
+            "load_demo_button_label": _env_text("LOAD_DEMO_BUTTON_LABEL"),
+            "indications": _env_list("LIVE_DISEASE_INDICATIONS"),
+        },
+        "confidence_panel": {
+            "title": _env_text("CONFIDENCE_PANEL_TITLE"),
+            "empty_state": _env_text("CONFIDENCE_EMPTY_STATE"),
+            "dimension_labels": {
+                "target_resolution": _env_text("CONFIDENCE_LABEL_TARGET_RESOLUTION"),
+                "circuit_alignment": _env_text("CONFIDENCE_LABEL_CIRCUIT_ALIGNMENT"),
+                "literature_support": _env_text("CONFIDENCE_LABEL_LITERATURE_SUPPORT"),
+            },
+        },
+    }
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/config", response_model=AppConfigResponse)
+async def app_config() -> dict:
+    """Return live UI configuration so the frontend avoids baked-in values."""
+    return _get_live_app_config()
 
 @app.get("/api/health")
 async def health() -> dict:

@@ -123,7 +123,7 @@ export function Brain3DViewer({
       try {
         await loadFallbackMesh(nv);
         setIsLoading(false);
-      } catch (fallbackErr) {
+      } catch {
         setError('Failed to load 3D brain model');
         setIsLoading(false);
       }

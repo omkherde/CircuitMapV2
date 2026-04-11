@@ -6,6 +6,73 @@
 
 ---
 
+## Anthropic Rate-Limit Optimization — 2026-04-11
+
+**Scope:** Reduce Anthropic token usage and model-turn count so live runs stay under tight org limits.
+
+### Changes Made
+
+| # | File(s) | Change |
+|---|---------|--------|
+| 1 | `backend/agent/prompts.py` | Replaced the long PRD-verbatim system prompt with a shorter operational prompt that preserves the reporting contract but explicitly tells the model to batch independent tool calls, avoid retries, and keep reasoning concise. |
+| 2 | `backend/agent/tools_schema.py` | Shortened all tool and field descriptions to reduce repeated schema tokens on every Anthropic request. Also lowered default optional payload sizes for literature and cognitive-association requests. |
+| 3 | `backend/agent/tools.py` | Added model-facing result compaction so Claude now receives only the fields needed for follow-up reasoning instead of the full raw tool payloads. Frontend SSE events still receive the richer full payloads. |
+| 4 | `backend/agent/tools.py` | Lowered default `top_n` / `top_k` fallback values for optional tool outputs to reduce both tool payload size and follow-up prompt size. |
+| 5 | `backend/agent/loop.py` | Reduced default Anthropic settings from `claude-opus-4-6`, `MAX_TOOL_CALLS=20`, and `max_tokens=4096` to smaller low-usage defaults: `claude-sonnet-4-6`, `MAX_TOOL_CALLS=5`, and `CLAUDE_MAX_OUTPUT_TOKENS=1024`. |
+| 6 | `backend/agent/loop.py` | Added a small rate-limit retry path for Anthropic `429`s with configurable backoff, so the app waits once instead of immediately burning more requests through manual retries. |
+| 7 | `backend/agent/loop.py` | Stopped replaying full assistant pre-tool reasoning back into the Anthropic conversation history; tool-use turns now preserve only the `tool_use` blocks needed for continuity. |
+| 8 | `backend/agent/loop.py` | Tightened the initial user prompt and continuation prompts so the agent is explicitly steered toward fewer turns and fewer duplicate calls. |
+| 9 | `backend/.env`, `backend/.env.example` | Added low-usage Anthropic tuning variables: `CLAUDE_MAX_OUTPUT_TOKENS`, `CLAUDE_MAX_API_RETRIES`, and `CLAUDE_RATE_LIMIT_BACKOFF_SECONDS`, and updated the default model/tool-call settings to match the optimized path. |
+
+### Verification
+
+- Backend Python compile check passed after the Anthropic loop and tool compaction changes.
+- Frontend `npm run build` passed unchanged after the backend-only optimization pass.
+- The optimized Anthropic defaults are now configurable entirely through `backend/.env` without further code edits.
+
+## Live Config De-Hardcoding — 2026-04-11
+
+**Scope:** Remove live-mode baked-in UI values and serve them from backend config, while intentionally keeping demo fixtures hardcoded.
+
+### Changes Made
+
+| # | File(s) | Change |
+|---|---------|--------|
+| 1 | `backend/main.py`, `backend/models/responses.py` | Added `/api/config` and a typed config response so the frontend can fetch live UI strings and the indication catalog from the backend instead of embedding them in React code. |
+| 2 | `backend/.env`, `backend/.env.example` | Moved live-mode app text, form labels, confidence labels, and supported indication options into environment-driven config values. |
+| 3 | `frontend/src/types/index.ts`, `frontend/src/api/client.ts`, `frontend/src/hooks/useAppConfig.ts`, `frontend/src/hooks/index.ts` | Added typed app-config support and a frontend config-loading hook. |
+| 4 | `frontend/src/App.tsx` | Wired the app to load live config before rendering the live UI and now sets the browser document title from fetched config instead of a baked-in product string. |
+| 5 | `frontend/src/components/Header.tsx`, `frontend/src/components/InputPanel.tsx`, `frontend/src/components/ConfidencePanel.tsx` | Removed live-mode hardcoded text and indication options from the header, input form, and confidence panel. These components now render from fetched config and show skeleton states while config is loading. |
+| 6 | `frontend/src/hooks/useAgentSession.ts` | Removed hardcoded confidence labels from session initialization and now hydrates them from backend config. |
+| 7 | `frontend/index.html` | Removed the baked-in app title so the runtime config can own the live-mode page title. |
+
+### Notes
+
+- Demo fixtures in `frontend/src/mocks/demoEvents.ts` and demo metadata remain intentionally hardcoded per request.
+
+## Target Resolution Hardening — 2026-04-11
+
+**Scope:** Prevent live sessions from stalling or going blank when drug-name or SMILES target resolution fails.
+
+### Changes Made
+
+| # | File(s) | Change |
+|---|---------|--------|
+| 1 | `backend/services/chembl_service.py` | Added faster failover behavior for target resolution, including explicit unresolved-target results when ChEMBL and PubChem are unavailable instead of returning only a raw error blob. |
+| 2 | `backend/services/chembl_service.py` | Added a PubChem canonicalization path that can rescue SMILES and variant drug names by resolving them to candidate names before retrying ChEMBL target lookup. |
+| 3 | `backend/services/chembl_service.py` | Added a configurable `TARGET_RESOLUTION_TIMEOUT_SECONDS` timeout to keep live sessions from hanging too long on external chemistry services. |
+| 4 | `backend/agent/tools.py` | Preserved `resolve_target` notes and fallback metadata in the compact model-facing payload so unresolved-target sessions still have enough information to generate a final report. |
+| 5 | `backend/agent/loop.py` | The agent loop now stores failed `resolve_target` outputs too, which allows the fallback report path to render a limitations-focused report instead of ending with an empty report panel. |
+| 6 | `backend/agent/prompts.py`, `backend/agent/loop.py` | Taught the agent and fallback report builder to stop anatomy analysis when the target cannot be resolved and to finish with an explicit unresolved-target explanation. |
+| 7 | `backend/.env`, `backend/.env.example` | Added the new target-resolution timeout config. |
+
+### Verification
+
+- Local service smoke tests confirmed:
+  - known drug-name fallback still resolves (`donepezil` → `ACHE`)
+  - arbitrary drug names now return an explicit unresolved-target result instead of an empty hard failure
+  - arbitrary SMILES now return an explicit unresolved-target result instead of an empty hard failure when external chemistry services are unavailable
+
 ## Debugging Continuation — 2026-04-11
 
 **Scope:** End-to-end backend/frontend debugging continuation from the failed AI-agent run.

@@ -12,7 +12,7 @@ import asyncio
 import json
 import os
 import time
-from typing import AsyncGenerator
+from typing import Any
 
 import anthropic
 
@@ -42,19 +42,16 @@ async def run_agent_session(
         indication: Disease indication string
         event_queue: asyncio.Queue for SSE events
     """
-    model = os.getenv("CLAUDE_MODEL", "claude-opus-4-6")
-    max_tool_calls = int(os.getenv("MAX_TOOL_CALLS", "20"))
+    model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+    max_tool_calls = int(os.getenv("MAX_TOOL_CALLS", "5"))
+    max_output_tokens = int(os.getenv("CLAUDE_MAX_OUTPUT_TOKENS", "1024"))
+    max_api_retries = int(os.getenv("CLAUDE_MAX_API_RETRIES", "1"))
+    rate_limit_backoff_seconds = int(os.getenv("CLAUDE_RATE_LIMIT_BACKOFF_SECONDS", "70"))
 
     messages = [
         {
             "role": "user",
-            "content": (
-                f"Validate this CNS drug target for the following indication.\n\n"
-                f"Drug input: {drug_query}\n"
-                f"Input type: {query_type}\n"
-                f"Disease indication: {indication}\n\n"
-                f"Begin your investigation."
-            )
+            "content": _build_initial_user_prompt(drug_query, query_type, indication)
         }
     ]
 
@@ -78,48 +75,29 @@ async def run_agent_session(
         full_text = ""
         tool_uses = []
 
-        try:
-            # Stream Claude's response
-            with client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                tools=TOOLS,
-                messages=messages
-            ) as stream:
-                for text_chunk in stream.text_stream:
-                    full_text += text_chunk
-                    # Emit thought chunks to the trace panel
-                    await event_queue.put({
-                        "type": "agent_thought",
-                        "content": text_chunk,
-                        "timestamp": int(time.time())
-                    })
-
-                # IMPORTANT: get final message after context manager exits
-                final_message = stream.get_final_message()
-
-            stop_reason = final_message.stop_reason
-
-            # Extract tool_use blocks from content
-            for block in final_message.content:
-                if block.type == "tool_use":
-                    tool_uses.append(block)
-
-            # Append assistant message to conversation
-            messages.append({
-                "role": "assistant",
-                "content": final_message.content
-            })
-
-        except anthropic.APIError as e:
-            await event_queue.put({
-                "type": "error",
-                "message": f"Claude API error: {str(e)}",
-                "recoverable": False,
-                "timestamp": int(time.time())
-            })
+        final_message, full_text = await _stream_claude_with_backoff(
+            model=model,
+            max_output_tokens=max_output_tokens,
+            messages=messages,
+            event_queue=event_queue,
+            max_api_retries=max_api_retries,
+            rate_limit_backoff_seconds=rate_limit_backoff_seconds,
+        )
+        if final_message is None:
             return
+
+        stop_reason = final_message.stop_reason
+
+        # Extract tool_use blocks from content
+        for block in final_message.content:
+            if block.type == "tool_use":
+                tool_uses.append(block)
+
+        # Keep only the minimum assistant context needed for follow-up turns.
+        messages.append({
+            "role": "assistant",
+            "content": _compact_assistant_content(final_message, full_text)
+        })
 
         # ── Handle tool calls ─────────────────────────────────────────────
         if stop_reason == "tool_use" and tool_uses:
@@ -198,7 +176,7 @@ async def run_agent_session(
                         disease_result = result_dict
                     elif tool_block.name == "compute_overlap" and "r" in result_dict:
                         overlap_result = result_dict
-                    elif tool_block.name == "resolve_target" and result_dict.get("primary_target"):
+                    elif tool_block.name == "resolve_target":
                         latest_target_result = result_dict
                     elif tool_block.name == "search_literature" and result_dict.get("results"):
                         literature_result = result_dict
@@ -268,7 +246,8 @@ async def run_agent_session(
                 "Do not repeat completed text. "
                 "Begin with 'TARGET VALIDATION REPORT COMPLETE' if you have not already done so. "
                 "Use the exact required section headers. "
-                "Do not call any more tools unless they are absolutely required."
+                "Do not call any more tools unless they are absolutely required. "
+                "Be concise."
             )
             if tool_limit_reached:
                 continue_prompt += " No more tool calls are available."
@@ -375,7 +354,94 @@ async def run_agent_session(
                     "message": f"PDF generation failed: {e}",
                     "recoverable": True,
                     "timestamp": int(time.time())
+                    })
+
+
+async def _stream_claude_with_backoff(
+    model: str,
+    max_output_tokens: int,
+    messages: list[dict[str, Any]],
+    event_queue: asyncio.Queue,
+    max_api_retries: int,
+    rate_limit_backoff_seconds: int,
+):
+    """Stream a Claude response with a small, explicit retry budget for 429s."""
+    attempts = max(0, max_api_retries) + 1
+
+    for attempt in range(attempts):
+        full_text = ""
+        try:
+            with client.messages.stream(
+                model=model,
+                max_tokens=max_output_tokens,
+                system=SYSTEM_PROMPT,
+                tools=TOOLS,
+                messages=messages
+            ) as stream:
+                for text_chunk in stream.text_stream:
+                    full_text += text_chunk
+                    await event_queue.put({
+                        "type": "agent_thought",
+                        "content": text_chunk,
+                        "timestamp": int(time.time())
+                    })
+
+                final_message = stream.get_final_message()
+
+            return final_message, full_text
+        except anthropic.RateLimitError as e:
+            if attempt >= attempts - 1:
+                await event_queue.put({
+                    "type": "error",
+                    "message": f"Claude API rate limit error: {str(e)}",
+                    "recoverable": False,
+                    "timestamp": int(time.time())
                 })
+                return None, ""
+
+            wait_seconds = rate_limit_backoff_seconds * (attempt + 1)
+            await event_queue.put({
+                "type": "agent_thought",
+                "content": f"\n[Anthropic rate limit hit. Waiting {wait_seconds}s before retrying.]\n",
+                "timestamp": int(time.time())
+            })
+            await asyncio.sleep(wait_seconds)
+        except anthropic.APIError as e:
+            await event_queue.put({
+                "type": "error",
+                "message": f"Claude API error: {str(e)}",
+                "recoverable": False,
+                "timestamp": int(time.time())
+            })
+            return None, ""
+
+    return None, ""
+
+
+def _build_initial_user_prompt(drug_query: str, query_type: str, indication: str) -> str:
+    return (
+        "Validate this CNS drug target for the following indication.\n\n"
+        f"Drug input: {drug_query}\n"
+        f"Input type: {query_type}\n"
+        f"Disease indication: {indication}\n\n"
+        "Constraints:\n"
+        "- Use the fewest model turns and tool calls possible.\n"
+        "- Batch independent tool calls into one turn when possible.\n"
+        "- Avoid repeating failed calls with minor wording changes.\n"
+        "- Keep intermediate reasoning short.\n\n"
+        "Begin your investigation."
+    )
+
+
+def _compact_assistant_content(final_message, full_text: str):
+    """Store the lightest possible assistant history while preserving tool flow."""
+    if final_message.stop_reason == "tool_use":
+        tool_blocks = [block for block in final_message.content if getattr(block, "type", None) == "tool_use"]
+        if tool_blocks:
+            return tool_blocks
+
+    stripped_text = full_text.strip()
+    return stripped_text if stripped_text else final_message.content
 
 
 def _parse_report_sections(report_text: str) -> dict:
@@ -603,13 +669,15 @@ def _build_fallback_report(
     affinity = (target_result or {}).get("binding_affinity")
     affinity_type = (target_result or {}).get("affinity_type", "")
     off_targets = (target_result or {}).get("off_targets", [])
+    resolution_note = (target_result or {}).get("note") or (target_result or {}).get("error", "")
+    target_unresolved = not (target_result or {}).get("primary_target")
 
     expression_result = expression_results.get(primary_target) or next(iter(expression_results.values()), None)
     expression_regions = (expression_result or {}).get("top_regions", [])[:5]
     disease_regions = (disease_result or {}).get("top_regions", [])[:5]
     literature_hits = (literature_result or {}).get("results", [])[:3]
 
-    if target_result:
+    if target_result and not target_unresolved:
         target_summary = [
             f"Primary target: {primary_target}",
             f"Target class: {target_class}",
@@ -624,10 +692,16 @@ def _build_fallback_report(
                 )
             )
         target_identification = "\n".join(target_summary)
+    elif target_result:
+        target_identification = "Primary target could not be resolved from the submitted molecule."
+        if resolution_note:
+            target_identification += f" {resolution_note}"
     else:
         target_identification = "Target data unavailable in this session."
 
-    if expression_regions:
+    if target_unresolved:
+        expression_analysis = "Brain expression analysis was skipped because no gene-level target could be resolved for the submitted molecule."
+    elif expression_regions:
         expression_analysis = (
             f"{expression_result.get('gene_name', primary_target)} expression is highest in: "
             + ", ".join(
@@ -639,7 +713,11 @@ def _build_fallback_report(
     else:
         expression_analysis = "Brain expression data was not available in this session."
 
-    if disease_regions:
+    if target_unresolved:
+        circuit_interpretation = (
+            "Functional circuit interpretation was limited because the primary target could not be resolved to a gene that can be mapped anatomically."
+        )
+    elif disease_regions:
         circuit_interpretation = (
             f"{indication} anatomy was concentrated in: "
             + ", ".join(region["region"] for region in disease_regions)
@@ -648,7 +726,9 @@ def _build_fallback_report(
     else:
         circuit_interpretation = f"No disease-anatomy map was available for {indication}."
 
-    if overlap_result and "r" in overlap_result:
+    if target_unresolved:
+        spatial_overlap = "Spatial overlap could not be computed because target resolution did not yield a gene-level brain map."
+    elif overlap_result and "r" in overlap_result:
         spatial_overlap = (
             f"Spatial overlap r = {overlap_result.get('r', 0):.3f}, "
             f"{overlap_result.get('percentile', 0)}th percentile, "
@@ -679,7 +759,7 @@ def _build_fallback_report(
     else:
         literature_context = "No literature hits were available in this session."
 
-    target_confidence = "HIGH" if target_result and target_result.get("confidence") == "confirmed" else "MODERATE"
+    target_confidence = "LOW" if target_unresolved else ("HIGH" if target_result and target_result.get("confidence") == "confirmed" else "MODERATE")
     circuit_confidence = "LOW"
     if overlap_result and overlap_result.get("percentile", 0) >= 75:
         circuit_confidence = "HIGH"
@@ -696,10 +776,16 @@ def _build_fallback_report(
         f"Literature Support: {literature_confidence} - Based on the retrieved local literature cache results.",
     ])
 
-    executive_summary = (
-        f"{primary_target} was identified as the leading target for the submitted molecule in the context of {indication}. "
-        f"This fallback report was synthesized directly from tool outputs because the model did not return the required final report format."
-    )
+    if target_unresolved:
+        executive_summary = (
+            f"The submitted molecule could not be resolved to a primary target for {indication} in the current session. "
+            f"This fallback report was synthesized directly from the available tool outputs."
+        )
+    else:
+        executive_summary = (
+            f"{primary_target} was identified as the leading target for the submitted molecule in the context of {indication}. "
+            f"This fallback report was synthesized directly from tool outputs because the model did not return the required final report format."
+        )
 
     return {
         "executive_summary": executive_summary,
@@ -718,6 +804,7 @@ def _build_fallback_report(
         "limitations": (
             "This report was auto-generated from intermediate tool outputs after the live model session ended "
             "without producing the required structured report marker."
+            + (f" Target-resolution note: {resolution_note}" if resolution_note else "")
         ),
     }
 

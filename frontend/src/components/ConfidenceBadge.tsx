@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Shield, ChevronDown, CheckCircle2, AlertCircle, XCircle, Clock } from 'lucide-react';
 import type { ConfidenceDimension, ConfidenceLevel } from '../types';
 import { cn } from '@/lib/utils';
@@ -10,8 +10,6 @@ interface ConfidenceBadgeProps {
 
 export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [prevLevel, setPrevLevel] = useState<ConfidenceLevel>('PENDING');
 
   const dimensions = Object.values(confidence);
   const hasAnyUpdate = dimensions.some((d) => d.level !== 'PENDING');
@@ -26,16 +24,6 @@ export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   };
 
   const overallLevel = getOverallLevel();
-
-  // Animate on level change
-  useEffect(() => {
-    if (overallLevel !== prevLevel && hasAnyUpdate) {
-      setIsAnimating(true);
-      const timer = setTimeout(() => setIsAnimating(false), 2000);
-      setPrevLevel(overallLevel);
-      return () => clearTimeout(timer);
-    }
-  }, [overallLevel, prevLevel, hasAnyUpdate]);
 
   const getGlowClass = (level: ConfidenceLevel) => {
     switch (level) {
@@ -97,8 +85,7 @@ export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
           overallLevel === 'MODERATE' && 'bg-confidence-moderate/10 border-confidence-moderate/30 text-confidence-moderate',
           overallLevel === 'LOW' && 'bg-confidence-low/10 border-confidence-low/30 text-confidence-low',
           overallLevel === 'PENDING' && 'bg-bg-surface border-white/[0.08] text-text-muted',
-          isAnimating && 'animate-confidence-glow',
-          isAnimating && getGlowClass(overallLevel)
+          getGlowClass(overallLevel)
         )}
       >
         <Shield className="w-4 h-4" />

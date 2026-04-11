@@ -1,73 +1,82 @@
-# React + TypeScript + Vite
+# CircuitMap — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript SPA built with Vite. Connects to the CircuitMap FastAPI backend via REST and Server-Sent Events.
 
-Currently, two official plugins are available:
+> For full project overview and backend setup, see the [root README](../README.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # → http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Vite proxies `/api/*` to `http://localhost:8000` — start the backend first.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build      # production build → dist/
+npm run lint       # ESLint
 ```
+
+---
+
+## Layout
+
+```
+src/
+  App.tsx                   Root layout — sidebar, main content, report drawer
+  api/client.ts             Axios API client + helper functions
+  hooks/
+    useAgentSession.ts      Session state, demo playback, SSE wiring
+    useAgentStream.ts       SSE connection management
+    useAppConfig.ts         Fetches live UI config from /api/config
+  components/
+    InputPanel.tsx          Drug/indication form + demo scenario buttons
+    BrainVisualizationCenter.tsx  Brain map viewer (side-by-side / overlay)
+    ReasoningTracePanel.tsx Live agent thought + tool call trace
+    SidebarConfidencePanel.tsx    3-dimension confidence display
+    ReportDrawer.tsx        Slide-in 11-section report panel
+    Header.tsx              App header with status indicator
+  mocks/demoEvents.ts       Hardcoded fallback events for offline demo mode
+  types/index.ts            All shared TypeScript types
+```
+
+---
+
+## SSE Event Handling
+
+The `useAgentStream` hook opens an `EventSource` connection to `/api/stream/{sessionId}`. Events are dispatched to `useAgentSession` which updates React state:
+
+| Event type | State update |
+|------------|-------------|
+| `brain_map` | `expressionMap` or `diseaseMap` |
+| `overlap_score` | `overlapScore` |
+| `confidence_update` | `confidence[dimension]` |
+| `report_ready` | `reportSections` |
+| `pdf_ready` | `pdfUrl` |
+| `done` | `phase → 'complete'` |
+
+Consecutive `agent_thought` chunks are merged into a single trace entry before rendering.
+
+---
+
+## Demo Mode
+
+Clicking a demo scenario button calls `loadDemo(scenario)`, which:
+1. Fetches pre-computed events from `GET /api/demo/{scenario}`
+2. If that fails (backend unavailable), falls back to hardcoded events in `mocks/demoEvents.ts`
+3. Replays events at 800 ms intervals to simulate a live session
+
+All demo scenarios include full reasoning traces, brain maps, correlation score, confidence ratings, report sections, and working PDF export.
+
+---
+
+## Environment
+
+```
+VITE_API_BASE_URL=    # empty = use Vite proxy (recommended for dev)
+```
+
+For production, set `VITE_API_BASE_URL` to the backend origin (e.g. `https://api.circuitmap.io`).

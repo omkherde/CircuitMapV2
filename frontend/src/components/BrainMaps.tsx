@@ -73,7 +73,7 @@ function BrainMapPanel({ title, mapData, icon, gradientFrom, gradientTo }: Brain
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
               className={cn(
-                'w-full h-full object-contain transition-all duration-300',
+                'w-full h-full object-contain transition-all duration-700',
                 imageLoaded ? 'opacity-100' : 'opacity-0',
                 isHovered && 'scale-105'
               )}
@@ -83,7 +83,7 @@ function BrainMapPanel({ title, mapData, icon, gradientFrom, gradientTo }: Brain
             <div className={cn(
               'absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent',
               'flex items-end justify-center pb-3',
-              'transition-opacity duration-200',
+              'transition-opacity duration-500',
               isHovered ? 'opacity-100' : 'opacity-0'
             )}>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 rounded-full text-xs font-medium text-slate-700">

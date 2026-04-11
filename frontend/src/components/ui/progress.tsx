@@ -11,6 +11,19 @@ function Progress({
 }: React.ComponentProps<typeof ProgressPrimitive.Root> & {
   indicatorClassName?: string
 }) {
+  const [displayValue, setDisplayValue] = React.useState(0)
+
+  // On mount: delay briefly so the browser paints 0 state first, then animate to value
+  // On updates: animate to new value immediately
+  React.useLayoutEffect(() => {
+    const timer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setDisplayValue(value || 0)
+      })
+    })
+    return () => cancelAnimationFrame(timer)
+  }, [value])
+
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
@@ -23,10 +36,10 @@ function Progress({
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
         className={cn(
-          "h-full w-full flex-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all duration-500 ease-out",
+          "h-full w-full flex-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all duration-1000 ease-out",
           indicatorClassName
         )}
-        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+        style={{ transform: `translateX(-${100 - displayValue}%)` }}
       />
     </ProgressPrimitive.Root>
   )

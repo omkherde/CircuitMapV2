@@ -128,15 +128,15 @@
 
 /* Animation utilities */
 .animate-fade-in {
-  animation: fadeIn 200ms ease-out;
+  animation: fadeIn 500ms ease-out backwards;
 }
 
 .animate-fade-in-scale {
-  animation: fadeInScale 300ms ease-out;
+  animation: fadeInScale 600ms ease-out backwards;
 }
 
 .animate-fade-in-slow {
-  animation: fadeIn 400ms ease-out;
+  animation: fadeIn 800ms ease-out backwards;
 }
 
 .animate-pulse-dot {
@@ -144,7 +144,7 @@
 }
 
 .animate-fill-bar {
-  animation: fillBar 800ms ease-out forwards;
+  animation: fillBar 1500ms ease-out forwards;
 }
 
 .animate-shimmer {
@@ -158,11 +158,11 @@
 }
 
 .animate-slide-in {
-  animation: slideInFromLeft 300ms ease-out;
+  animation: slideInFromLeft 600ms ease-out backwards;
 }
 
 .animate-count-up {
-  animation: countUp 500ms ease-out;
+  animation: countUp 1000ms ease-out backwards;
 }
 
 .animate-gradient {
@@ -171,19 +171,19 @@
 }
 
 .animate-accordion-down {
-  animation: accordion-down 0.2s ease-out;
+  animation: accordion-down 0.4s ease-out;
 }
 
 .animate-accordion-up {
-  animation: accordion-up 0.2s ease-out;
+  animation: accordion-up 0.4s ease-out;
 }
 
 /* Staggered animation delays */
-.stagger-1 { animation-delay: 50ms; }
-.stagger-2 { animation-delay: 100ms; }
-.stagger-3 { animation-delay: 150ms; }
-.stagger-4 { animation-delay: 200ms; }
-.stagger-5 { animation-delay: 250ms; }
+.stagger-1 { animation-delay: 100ms; }
+.stagger-2 { animation-delay: 200ms; }
+.stagger-3 { animation-delay: 300ms; }
+.stagger-4 { animation-delay: 400ms; }
+.stagger-5 { animation-delay: 500ms; }
 
 /* Base styles */
 body {
@@ -340,7 +340,7 @@ body {
 
 /* Hover lift effect */
 .hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
 }
 
 .hover-lift:hover {
@@ -400,14 +400,14 @@ body {
   a,
   [role="button"] {
     transition-property: transform, box-shadow, background-color, border-color, color, opacity;
-    transition-duration: 150ms;
+    transition-duration: 300ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Spring-like button press effect */
   button:active:not(:disabled):not([data-slot="accordion-trigger"]) {
     transform: scale(0.97);
-    transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 }
 
@@ -418,11 +418,11 @@ body {
 
 /* Radix animations */
 [data-state="open"] {
-  animation: fadeIn 150ms ease-out;
+  animation: fadeIn 350ms ease-out;
 }
 
 [data-state="closed"] {
-  animation: fadeOut 150ms ease-in;
+  animation: fadeOut 250ms ease-in;
 }
 
 @keyframes fadeOut {

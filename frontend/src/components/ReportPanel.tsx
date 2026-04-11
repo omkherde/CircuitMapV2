@@ -13,7 +13,6 @@ import {
   ClipboardList
 } from 'lucide-react';
 import type { ReportSections } from '../types';
-import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -27,7 +26,6 @@ interface SectionConfig {
   key: keyof ReportSections;
   label: string;
   icon: React.ReactNode;
-  color: string;
 }
 
 const SECTION_CONFIG: SectionConfig[] = [
@@ -35,67 +33,56 @@ const SECTION_CONFIG: SectionConfig[] = [
     key: 'executive_summary',
     label: 'Executive Summary',
     icon: <ClipboardList className="w-4 h-4" />,
-    color: 'from-indigo-500 to-blue-600'
   },
   {
     key: 'target_identification',
     label: 'Target Identification',
     icon: <Target className="w-4 h-4" />,
-    color: 'from-violet-500 to-purple-600'
   },
   {
     key: 'expression_analysis',
     label: 'Expression Analysis',
     icon: <Dna className="w-4 h-4" />,
-    color: 'from-cyan-500 to-teal-600'
   },
   {
     key: 'disease_anatomy',
     label: 'Disease Anatomy',
     icon: <Brain className="w-4 h-4" />,
-    color: 'from-rose-500 to-pink-600'
   },
   {
     key: 'spatial_overlap',
     label: 'Spatial Overlap',
     icon: <GitCompareArrows className="w-4 h-4" />,
-    color: 'from-amber-500 to-orange-600'
   },
   {
     key: 'circuit_interpretation',
     label: 'Circuit Interpretation',
     icon: <Network className="w-4 h-4" />,
-    color: 'from-emerald-500 to-green-600'
   },
   {
     key: 'literature_context',
     label: 'Literature Context',
     icon: <BookOpen className="w-4 h-4" />,
-    color: 'from-blue-500 to-indigo-600'
   },
   {
     key: 'confidence_assessment',
     label: 'Confidence Assessment',
     icon: <Shield className="w-4 h-4" />,
-    color: 'from-teal-500 to-cyan-600'
   },
   {
     key: 'limitations',
     label: 'Limitations',
     icon: <AlertTriangle className="w-4 h-4" />,
-    color: 'from-orange-500 to-red-600'
   },
   {
     key: 'recommendations',
     label: 'Recommendations',
     icon: <Lightbulb className="w-4 h-4" />,
-    color: 'from-yellow-500 to-amber-600'
   },
   {
     key: 'references',
     label: 'References',
     icon: <Link2 className="w-4 h-4" />,
-    color: 'from-slate-500 to-gray-600'
   },
 ];
 
@@ -158,10 +145,7 @@ export function ReportPanel({ sections }: ReportPanelProps) {
               <AccordionItem key={config.key} value={config.key}>
                 <AccordionTrigger>
                   <div className="flex items-center gap-2.5">
-                    <div className={cn(
-                      'w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br',
-                      config.color
-                    )}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br from-slate-400 to-slate-500">
                       <span className="text-white">{config.icon}</span>
                     </div>
                     <span className="text-sm font-semibold text-slate-800">{config.label}</span>

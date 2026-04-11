@@ -1,160 +1,128 @@
-# CircuitMap — CNS Drug Target Validation Agent
+# CircuitMap — Technical Reference
 
-CircuitMap is an autonomous AI agent that validates CNS drug targets by
-computationally mapping the path from a candidate molecule to its brain circuit
-impact. It replaces a consultant-driven process that typically takes 6 weeks and
-$150,000–$200,000 with a 4-minute agentic run.
+> For the full project overview, see the [root README](../README.md).
 
----
-
-## Problem
-
-95% of CNS clinical trials fail, primarily due to poor target selection — not
-bad chemistry. Existing tools stop at the protein (Schrödinger) or at target
-identification (BenevolentAI). No tool bridges the gap to circuit-level brain
-mapping and disease anatomy.
+This document covers backend service internals, environment configuration, and deployment notes.
 
 ---
 
-## How It Works
+## Environment Variables
 
-Given a **drug compound** (name or SMILES) and a **disease indication**, the
-agent orchestrates six scientific tools in a Claude-powered loop:
+Copy `backend/.env.example` to `backend/.env` and set at minimum `ANTHROPIC_API_KEY`.
 
-1. **resolve_target** — Resolves the molecule to its primary protein target via ChEMBL + PubChem
-2. **get_brain_expression** — Queries Allen Human Brain Atlas (AHBA) for regional gene expression
-3. **get_disease_map** — Retrieves a Neurosynth meta-analytic disease activation map
-4. **compute_overlap** — Computes spatial Pearson correlation between expression and disease maps
-5. **get_cognitive_associations** — Performs reverse inference on cognitive associations
-6. **search_literature** — Searches a pre-embedded PubMed RAG store for literature evidence
-
-The agent synthesizes findings into a structured **11-section Target Validation
-Report** with PDF export.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key |
+| `CLAUDE_MODEL` | `claude-opus-4-6` | Model used for the agent loop |
+| `CLAUDE_MAX_OUTPUT_TOKENS` | `4096` | Max tokens per Anthropic response |
+| `CLAUDE_MAX_TOOL_CALLS` | `20` | Hard cap on tool invocations per session |
+| `CLAUDE_MAX_API_RETRIES` | `3` | Retry count on Anthropic 429 rate-limit errors |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key |
+| `NEUROSYNTH_DATA_DIR` | `./cache/neurosynth_data` | Neurosynth v7 dataset cache |
+| `AHBA_DATA_DIR` | `./cache/ahba_data` | AHBA microarray cache |
+| `CHROMA_DB_DIR` | `./cache/chroma_db` | ChromaDB persistent store |
+| `DEMO_CACHE_DIR` | `./cache/demo` | Pre-computed demo scenario cache |
+| `SESSIONS_DIR` | `./sessions` | Per-session runtime files |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | sentence-transformers model for RAG |
 
 ---
 
-## Architecture
+## Service Architecture
 
+### `services/chembl_service.py`
+Resolves a drug name or SMILES string to its primary protein target.
+
+Resolution order:
+1. Live ChEMBL REST API (chembl_webresource_client)
+2. PubChem SMILES canonicalization → retry ChEMBL with canonical name
+3. Bundled offline target profiles (used when both APIs are unavailable)
+
+Returns `primary_target`, `binding_affinity`, `mechanism`, `off_targets`, and `source`.
+
+### `services/ahba_service.py`
+Loads Allen Human Brain Atlas microarray data from 6 donor directories under `cache/ahba_data/microarray/`.
+
+Expression values are averaged across donors per brain region, then parcellated to 20 canonical MNI ROI coordinates using inverse-distance weighted averaging within a 15 mm radius (`_parcellate_by_mni_coords`). Returns normalized [0, 1] values per ROI for use in spatial correlation.
+
+### `services/neurosynth_service.py`
+Loads `cache/neurosynth_data/dataset.pkl` — a dict containing:
+- `coords` — DataFrame of 507,891 MNI activations across 14,371 studies
+- `features` — sparse TF-IDF matrix (14,371 × 3,228)
+- `vocabulary` — 3,228 term strings
+- `study_ids` / `study_id_to_idx` — row index mapping
+
+**Disease maps** (`_disease_map_v7`): select studies by TF-IDF weight > 0.001 for the indication term, count activations within 10 mm of each ROI, normalise to [0, 1].
+
+**Reverse inference** (`_reverse_inference`): find activations within 10 mm of query ROI coordinates, collect study IDs, sum TF-IDF term weights across those studies, return top terms.
+
+Both functions fall back to curated offline templates when the dataset is not loaded.
+
+### `services/correlation_service.py`
+Computes Pearson *r* between two ROI-parcellated maps using `scipy.stats.pearsonr`. Significance is estimated from 1,000 random permutations (seed=42) of the disease map. Returns `r`, `p_value`, and `percentile` (empirical rank among null distribution).
+
+### `services/rag_service.py`
+Primary path: encodes query with `SentenceTransformer(EMBEDDING_MODEL)`, queries ChromaDB by cosine distance, converts distance to similarity via `1 - dist/2`.
+
+Fallback: lexical token-overlap scoring when the embedding model or Chroma store is unavailable.
+
+### `services/pdf_service.py`
+ReportLab A4 PDF containing all 11 report sections, brain map PNGs, and overlap score. Generated in a `ThreadPoolExecutor` to avoid blocking the async event loop. Output saved to `sessions/{session_id}/report.pdf`.
+
+---
+
+## Agent Loop (`agent/loop.py`)
+
+The loop runs inside an `asyncio.Task` started by `POST /api/validate`. It:
+
+1. Sends a system prompt + initial user message to the Anthropic API
+2. On `tool_use` stop reason: dispatches tool calls to `agent/tools.py`, sends `tool_result` blocks back
+3. On `end_turn`: extracts `report_ready` sections, emits `confidence_update` events, triggers PDF generation
+4. On `max_tokens`: continues with a continuation prompt
+5. Hard-stops at `CLAUDE_MAX_TOOL_CALLS`; triggers a fallback report from accumulated tool outputs
+
+All events are put into a per-session `asyncio.Queue`. The SSE endpoint reads from this queue.
+
+---
+
+## SSE Stream
+
+The `GET /api/stream/{session_id}` endpoint uses `sse_starlette.EventSourceResponse` with a 15-second keepalive ping loop. Only one consumer per session is permitted (returns 409 on duplicate connection). The endpoint decrements the consumer counter in a `finally` block.
+
+---
+
+## Demo Mode
+
+`GET /api/demo/{scenario}` serves pre-computed events from `cache/demo/{scenario}.json` (generated by `scripts/precompute_demo.py`). If the JSON does not exist, the endpoint returns 404 and the frontend falls back to the hardcoded local events in `frontend/src/mocks/demoEvents.ts`.
+
+`GET /api/report/demo_{scenario}/download` generates a PDF on-the-fly from hardcoded report sections (`_DEMO_REPORT_SECTIONS` in `main.py`) the first time it is requested, caches it at `cache/demo/{scenario}.pdf`, and serves the cached file on subsequent requests.
+
+---
+
+## Security
+
+- Session IDs are validated against `^[a-zA-Z0-9_\-]{1,64}$` before any filesystem access
+- Map type is validated against an allowlist `{"expression", "disease"}` before path construction
+- Duplicate SSE consumer connections return 409
+
+---
+
+## Deployment
+
+The `backend/Dockerfile` builds a single-worker Python 3.11-slim image:
+
+```dockerfile
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 ```
-frontend/          React + TypeScript SPA (Vite)
-  └─ Three-panel layout: input, live reasoning trace, brain maps + report
 
-backend/           FastAPI + Python 3.11
-  ├─ main.py       REST + SSE endpoints
-  ├─ agent/        Claude tool-use loop, tool schemas, prompts
-  └─ services/     ahba, neurosynth, chembl, correlation, rag, pdf
-```
-
-**Data flow:**
-1. POST `/api/validate` → creates session, starts agent loop as background task
-2. GET `/api/stream/{session_id}` → SSE stream of live agent events
-3. Frontend renders reasoning trace, brain map images, overlap score, and final report in real time
-
-**Offline fallbacks** are present for all external data sources (AHBA cached
-donor files, Neurosynth curated templates, ChEMBL local target profiles, lexical
-RAG fallback). The graceful degradation hierarchy is: live agent → demo mode →
-static screenshots.
+The `--workers 1` constraint is required because the in-memory session and correlation stores are not process-safe. For multi-worker production deployment, replace `sessions` and `_map_store` with Redis.
 
 ---
 
-## Setup
-
-### Prerequisites
-
-- Python 3.11 (required — abagen/numpy conflict in 3.12)
-- Node.js 18+
-- An Anthropic API key
-
-### Backend
+## Testing
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env — set ANTHROPIC_API_KEY at minimum
-uvicorn main:app --reload --workers 1
+venv/bin/python3 -m pytest tests/test_api.py -v
 ```
 
-> **Important:** Run with `--workers 1`. The in-memory session store and
-> correlation map store are not process-safe under multiple workers.
-
-#### (Optional) Pre-load data caches
-
-```bash
-# Download ~500 MB AHBA microarray data + build Neurosynth + ChromaDB RAG index
-python scripts/preload_data.py
-
-# Pre-compute demo scenarios (Alzheimer's, Schizophrenia, Depression)
-python scripts/precompute_demo.py
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev        # http://localhost:5173
-```
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/validate` | Start an agent session |
-| GET | `/api/stream/{session_id}` | SSE stream of live agent events |
-| GET | `/api/demo/{scenario}` | Pre-computed demo (alzheimers / schizophrenia / depression) |
-| GET | `/api/maps/{session_id}/{type}.png` | Serve brain map PNG |
-| GET | `/api/report/{session_id}/download` | Download PDF report |
-| GET | `/api/health` | Data-cache readiness check |
-| GET | `/api/config` | Live UI configuration from environment |
-
----
-
-## Demo Scenarios
-
-| Scenario | Drug | Indication |
-|----------|------|------------|
-| `alzheimers` | Chaetocin (SUV39H1 inhibitor) | Alzheimer's disease |
-| `schizophrenia` | Tolcapone (COMT inhibitor) | Schizophrenia |
-| `depression` | Vorinostat (HDAC1 inhibitor) | Major depressive disorder |
-
----
-
-## Key Design Decisions
-
-- **Why 20 ROI coordinates?** A curated set of 20 canonical MNI coordinates
-  covering hippocampus, prefrontal cortex, amygdala, striatum, thalamus,
-  cerebellum, entorhinal cortex, anterior cingulate, insula, and parietal/
-  occipital regions provides sufficient spatial coverage for CNS target
-  validation while keeping correlation computation fast.
-
-- **Why curated cognitive lookup table instead of the Neurosynth decoder?**
-  The Neurosynth decoder requires a full 3D NIfTI image and a complete term
-  co-activation database. The curated table offers deterministic, offline
-  associations that are consistent across runs and do not depend on live
-  Neurosynth data.
-
-- **Why open data sources (AHBA, Neurosynth) over proprietary datasets?**
-  Peer-reviewed, open data provides reproducibility and regulatory defensibility
-  that proprietary black-box datasets (BenevolentAI, Insilico) cannot. Every
-  correlation can be independently replicated.
-
-- **1000-permutation null distribution (seed=42):** Scientifically appropriate
-  for establishing spatial significance without requiring spin-test precomputation.
-  See Arnatkevičiūtė et al. (2021) for the reference methodology.
-
----
-
-## Documentation
-
-| File | Contents |
-|------|----------|
-| `docs/prd.md` | Full Product Requirements Document |
-| `docs/techstack.md` | Pinned dependency rationale |
-| `docs/split.md` | Developer work-split specification |
-| `docs/masterprompt.md` | AI-assisted implementation prompt |
-| `docs/CHANGELOG.md` | Integration bug log and resolutions |
+13 tests covering: health endpoint, session validation, path traversal guards, demo endpoint, SSE consumer guard, correlation cleanup, and Chaetocin target assertion.

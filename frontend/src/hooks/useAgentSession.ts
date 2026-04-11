@@ -54,7 +54,7 @@ const initialState: SessionState = {
   error: null,
 };
 
-// Demo scenario metadata
+// Demo scenario metadata — must match backend scripts/precompute_demo.py
 const demoMetadata: Record<DemoScenario, { drugQuery: string; queryType: QueryType; indication: string }> = {
   alzheimers: {
     drugQuery: 'Chaetocin',
@@ -62,14 +62,14 @@ const demoMetadata: Record<DemoScenario, { drugQuery: string; queryType: QueryTy
     indication: "Alzheimer's disease",
   },
   schizophrenia: {
-    drugQuery: 'Clozapine',
+    drugQuery: 'Tolcapone',
     queryType: 'name',
     indication: 'Schizophrenia',
   },
   depression: {
-    drugQuery: 'Ketamine',
+    drugQuery: 'Vorinostat',
     queryType: 'name',
-    indication: 'Treatment-resistant depression',
+    indication: 'Major depressive disorder',
   },
 };
 
@@ -83,6 +83,20 @@ export function useAgentSession() {
   const handleEvent = useCallback((event: TraceEvent) => {
     setState((prev) => {
       const newState = { ...prev };
+
+      // Merge consecutive agent_thought chunks into one entry so the trace
+      // doesn't fill up with hundreds of tiny fragments from the SSE stream.
+      if (event.type === 'agent_thought') {
+        const last = prev.traceEvents[prev.traceEvents.length - 1];
+        if (last?.type === 'agent_thought') {
+          const merged = { ...last, content: last.content + event.content };
+          newState.traceEvents = [...prev.traceEvents.slice(0, -1), merged];
+        } else {
+          newState.traceEvents = [...prev.traceEvents, event];
+        }
+        return newState;
+      }
+
       newState.traceEvents = [...prev.traceEvents, event];
 
       switch (event.type) {

@@ -58,7 +58,7 @@ function App() {
 
             <ConfidencePanel confidence={state.confidence} />
 
-            {state.phase === 'complete' && (
+            {state.phase === 'complete' && !state.isDemo && (
               <ExportButton pdfUrl={state.pdfUrl} sessionId={state.sessionId} />
             )}
           </aside>

@@ -6,8 +6,9 @@ import { cn } from '@/lib/utils';
 import { Loader2, RotateCcw, ZoomIn, ZoomOut, Move3d } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// API base URL for atlas files
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// In production this should come from VITE_API_BASE_URL; an empty fallback keeps
+// same-origin requests working for local proxying and hosted frontend deployments.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 interface AtlasData {
   regions: string[];

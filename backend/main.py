@@ -57,15 +57,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CircuitMap API", version="1.0.0", lifespan=lifespan)
 
+def _env_csv_list(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+_default_cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+
 # CORS must be added BEFORE any routes
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_env_csv_list("CORS_ORIGINS") or _default_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],

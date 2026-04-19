@@ -16,5 +16,7 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    allowedHosts: ['yearbook-throbbing-abdomen.ngrok-free.dev'], // Add your ngrok host here
+    host: true, // Allow external access
   },
 })

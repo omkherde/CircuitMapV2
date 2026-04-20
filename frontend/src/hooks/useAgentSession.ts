@@ -251,6 +251,11 @@ export function useAgentSession() {
           indication: response.indication,
         }));
 
+        // Validate response before using it
+        if (!response.events || !Array.isArray(response.events)) {
+          throw new Error('Invalid demo response from API');
+        }
+
         // Store demo events and start playback
         demoEventsRef.current = response.events;
         demoIndexRef.current = 0;
